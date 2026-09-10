@@ -1,6 +1,6 @@
 # daybook 开发计划（v1.4 · 自托管个人版）
 
-> 文档版本：v1.4 ｜ 2026-09-10 ｜ 就地升级自 v1.3（v1.1 收在 `docs/diary-app-development-plan-v1.1.md`）
+> 文档版本：v1.4 ｜ 2026-09-10 ｜ 就地升级自 v1.3（v1.1 收在 `docs/zh-CN/archive/diary-app-development-plan-v1.1.md`）
 > 部署形态：**自有 VPS + Docker 镜像**（3 vCPU / 4 GB RAM / 老 CPU）；应用容器只监听 **8090**，**反向代理由你自己部署（nginx 等）**
 > 账号形态：**用户名 + 密码，注册关闭，账号由管理员侧添加**（无邮箱、无邮件子系统）
 > 使用范围：自己为主，可能加上少量朋友；不上架任何商店
@@ -161,8 +161,8 @@
 
 ## 5. 时间规则（✅ 已实现）
 
-代码：**`shared/src/time.ts`**（零依赖，只用内置 `Intl`，前后端同一份）。
-测试：**`shared/test/time.test.ts`**，19 个用例。
+代码：**`source/shared/src/time.ts`**（零依赖，只用内置 `Intl`，前后端同一份）。
+测试：**`source/shared/test/time.test.ts`**，19 个用例。
 
 | 函数 | 职责 |
 | --- | --- |
@@ -281,15 +281,15 @@ FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production PORT=8090
 # 先装依赖，利用层缓存
-COPY package.json package-lock.json ./
-COPY shared/package.json shared/
-COPY server/package.json server/
-COPY web/package.json web/
+COPY source/package.json source/package-lock.json ./
+COPY source/shared/package.json shared/
+COPY source/server/package.json server/
+COPY source/web/package.json web/
 RUN npm ci --omit=dev
 # 源码直跑，无构建步骤；前端产物随镜像进来
-COPY shared ./shared
-COPY server ./server
-COPY web/dist ./web/dist
+COPY source/shared ./shared
+COPY source/server ./server
+COPY source/web/dist ./web/dist
 EXPOSE 8090
 CMD ["sh", "-c", "node server/src/db/migrate.ts && node server/src/index.ts"]
 ```
@@ -340,7 +340,7 @@ volumes: { pgdata: {} }
 
 ### 7.4 数据库
 
-- 迁移：`server/migrations/*.sql`，容器启动时 `node server/src/db/migrate.ts` 自动执行，幂等；
+- 迁移：`source/server/migrations/*.sql`，容器启动时 `node server/src/db/migrate.ts` 自动执行，幂等；
 - 小机器参数写进 compose 的 `db.command`（见上面 compose）；
 - 备份与恢复一律通过 `docker compose exec db pg_dump`，不依赖宿主上的 psql。
 
@@ -397,7 +397,7 @@ tick 循环（每分钟）：
        插入成功 = 首次发送机会；插入冲突 = 已处理过，跳过（幂等）
   → "仅未完成时提醒"开启且内容已完成 → 记 skipped
   → 否则发送 Web Push：成功 → sent；404/410 → 立即禁用该订阅；其他失败 → failed + 下一轮重试（≤3 次）
-  → 无条件重算 next_fire_at = nextFireAt(now, …)   # shared/src/time.ts
+  → 无条件重算 next_fire_at = nextFireAt(now, …)   # source/shared/src/time.ts
 ```
 
 ### 8.3 订阅管理
@@ -422,7 +422,7 @@ tick 循环（每分钟）：
 ### 9.1 结构
 
 ```text
-web/src/
+source/web/src/
 ├── pages/      TodayPage / CalendarPage / DiaryDetailPage / SettingsPage / InstallGuidePage
 ├── components/ MorningJournalCard（YesterdayReviewSection 写 D-1、TodayPlanSection 写 D）
 │               IncidentTimeline / QuickIncidentModal / EveningSummaryCard
@@ -483,11 +483,11 @@ Manifest（`display: standalone`）+ Service Worker（应用壳与最近日记�
 
 ```bash
 # 本地（Windows / Node 24）：shared 纯逻辑 + server 认证与令牌
-node --test "shared/test/*.test.ts" "server/test/*.test.ts"
+node --test "source/shared/test/*.test.ts" "source/server/test/*.test.ts"
 
 # WSL：WSL 自带的 Node 22 是不含 TS 支持的构建（ERR_NO_TYPESCRIPT），两条路都验证过：
 #   a) 直接调 Windows 的 Node 24（已实测 39 用例全绿）
-cd "/mnt/f/Ai Code/personal-projects/daybook" && "/mnt/c/Program Files/nodejs/node.exe" --test "shared/test/*.test.ts" "server/test/*.test.ts"
+cd "/mnt/f/Ai Code/personal-projects/daybook" && "/mnt/c/Program Files/nodejs/node.exe" --test "source/shared/test/*.test.ts" "source/server/test/*.test.ts"
 #   b) 或把 WSL 的 Node 升到 24（nvm install 24 / NodeSource）后直接 node --test
 ```
 
@@ -497,8 +497,8 @@ cd "/mnt/f/Ai Code/personal-projects/daybook" && "/mnt/c/Program Files/nodejs/no
 
 | 层 | 覆盖 | 工具 |
 | --- | --- | --- |
-| 纯逻辑 ✅ | 日界、时区、DST、提醒推进 | `node --test`（`shared/test`） |
-| 认证与令牌 ✅ | scrypt 哈希/校验、JWT 签名与校验、refresh 令牌哈希 | `node --test`（`server/test`，零依赖） |
+| 纯逻辑 ✅ | 日界、时区、DST、提醒推进 | `node --test`（`source/shared/test`） |
+| 认证与令牌 ✅ | scrypt 哈希/校验、JWT 签名与校验、refresh 令牌哈希 | `node --test`（`source/server/test`，零依赖） |
 | 服务端 | 排程幂等、时区重算、字段级冲突、账号隔离、订阅 410 清理、迁移可跑 | `node --test` + 测试库（在 compose 的 db 上建 `daybook_test` 跑迁移） |
 | 接口 | 登录、今日聚合、PATCH 契约、日历 | Fastify `inject()`，不启真实端口 |
 | 前端 | 自动保存状态机、草稿重放 | Playwright（可选，第二迭代） |
@@ -684,31 +684,24 @@ CREATE TABLE refresh_tokens (
 
 ```text
 daybook/
+├── DAYBOOK-DESIGN.zh-CN.md   本设计文档
 ├── README.md
-├── package.json                 ← workspaces: shared / server / web
-├── Dockerfile  compose.yml  .dockerignore                 （阶段 1）
-├── docs/
-│   ├── development-plan.md                    ← 本文档（当前有效）
-│   └── diary-app-development-plan-v1.1.md     ← 归档（历史，仅作参考）
-├── shared/                                    ← 前后端共用纯逻辑
-│   ├── src/time.ts                            ✅ 已实现
-│   └── test/time.test.ts                      ✅ 19 用例全绿
-├── server/
-│   ├── src/auth.ts                            ✅ 已实现（scrypt + HS256 JWT + refresh 令牌）
-│   ├── test/auth.test.ts                      ✅ 已实现（20 用例）
-│   ├── src/index.ts  src/routes/*             （阶段 1）
-│   ├── src/db/{schema.ts,migrate.ts}          （阶段 1）
-│   ├── src/cli/user.ts                        （阶段 1：建号/重置密码/停用）
-│   └── migrations/*.sql                       （阶段 1）
-├── web/                                       （阶段 1：React + Vite + Tailwind，PWA）
-└── android/                                   （第二迭代：Capacitor 壳；keystore.properties 不入库）
+├── Dockerfile / compose.yml  容器构建与编排
+├── deploy/                   daybook.env.example、backup.sh
+├── docs/zh-CN/               development / deployment / operations
+└── source/                   全部应用源码（npm workspaces）
+    ├── package.json          workspaces: shared / server / web
+    ├── shared/               前后端共用纯逻辑（time.ts）
+    ├── server/               后端：Fastify + PostgreSQL
+    ├── web/                  前端：React + Vite + Tailwind（PWA）
+    └── scripts/              make-icons.mjs 等构建/资源脚本
 ```
 
 ## 附录 C：常用命令
 
 ```bash
 # 本地测试（Windows / Node 24，或 WSL 里用 Node 24）
-node --test "shared/test/*.test.ts" "server/test/*.test.ts"
+node --test "source/shared/test/*.test.ts" "source/server/test/*.test.ts"
 npm test                                     # 同上（走 package.json 脚本）
 
 # 服务器（Docker；反代由你自备，应用只监听 8090）
@@ -756,6 +749,12 @@ npm run android:release                            # 构建 web + cap sync + ass
 11. **账号删除（验收标准第 10 条）**：新增 `DELETE /v1/account`（口令确认 → 立刻吊销全部会话、清推送订阅、停提醒排程、状态转 `pending_deletion`）+ 迁移 `0001_account_deletion.sql` + 每分钟 tick 自动清理过 7 天宽限期的账号 + CLI `purge` / `purge-expired` + 设置页入口。
 12. **前端离线草稿可能盖掉更新的服务器内容** → 重放前比对时间（含 2 分钟时钟偏差容忍），明显过期的草稿丢弃并告知用户。
 13. **请求在途时 pagehide 会丢字** → 先把草稿落盘，再排队补一次 flush。
+
+### 17.2.1 一个真实的坑：历史迁移的注释也不能改
+
+按本文档 §16 的仓库约定重组目录时（代码全部收进 `source/`），顺手把注释里指向旧文档名的路径也改了——结果改到了**已经应用过的迁移文件**（`0000_init.sql` 与 `0001_account_deletion.sql` 的注释行）。migrator 会比对已应用迁移的 sha256，改一个字符都算“历史迁移被改动”，服务直接拒绝启动（日志：“迁移 … 在应用之后被改动过”），容器于是重启循环。
+
+所以这两个文件的注释**有意保持着旧文档名 `docs/development-plan.md`**（本文件现在叫 `DAYBOOK-DESIGN.zh-CN.md`）：历史迁移一旦跑过就不该再碰，要补充说明就写进新迁移或文档。给“已应用过的迁移”做任何编辑（哪怕只改注释）之前，先回想这条规则。
 
 ### 17.3 验证与未验证
 

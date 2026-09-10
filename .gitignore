@@ -1,30 +1,74 @@
-# 依赖与构建产物
-node_modules/
-dist/
-build/
-.vite/
-*.tsbuildinfo
+# 默认全部忽略，只放行下面显式批准的内容（与 lastdone 仓库同一套策略）。
+#
+# 好处：将来在根目录随手建的脚本/草稿/数据不会被误提交；坏处：新增顶层目录时要记得加放行。
+# 与 .dockerignore 保持同样的白名单思路。
 
-# 环境与密钥（.env 含 DATABASE_URL / JWT_SECRET / VAPID 私钥）
-.env
-.env.*
-!.env.example
+/*
 
-# 日志与测试产物
-*.log
-npm-debug.log*
-coverage/
-playwright-report/
-test-results/
+# 策略本体
+!/.gitignore
 
-# 数据库备份（不要在仓库里存日记数据）
-backups/
+# —— 全部应用源码 ——
+!/source/
+!/source/**
+# 依赖与产物永不入库
+/source/**/node_modules/
+/source/**/dist/
+/source/**/coverage/
+/source/**/test-results/
+/source/**/playwright-report/
+/source/**/.vite/
+/source/**/.cache/
+/source/**/*.tsbuildinfo
+# 本地密钥与原生端签名文件
+/source/**/.env
+/source/**/.env.*
+!/source/**/.env.example
+/source/**/*.jks
+/source/**/*.keystore
+/source/**/keystore.properties
+
+# —— 根目录的入口文档与编排 ——
+!/README.md
+!/DAYBOOK-DESIGN.zh-CN.md
+!/Dockerfile
+!/Dockerfile.*
+!/.dockerignore
+!/compose.yml
+!/compose.yaml
+!/compose.*.yml
+!/compose.*.yaml
+!/docker-compose.yml
+!/docker-compose.yaml
+!/docker-compose.*.yml
+!/docker-compose.*.yaml
+
+# —— 部署输入物 ——
+!/deploy/
+!/deploy/**
+# 真实 env 与备份产物仍然忽略，只放行示例
+/deploy/.env
+/deploy/*.env
+!/deploy/*.env.example
+
+# —— 文档（按语言分目录）——
+!/docs/
+/docs/*
+!/docs/zh-CN/
+!/docs/zh-CN/**
+!/docs/en/
+!/docs/en/**
+
+# —— GitHub Actions（只放行 CI）——
+!/.github/
+/.github/*
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/ci.yml
+
+# —— 本地密钥与运行数据（永不入库）——
+/.env
+/.env.*
+/backups/
 *.dump
 *.sql.gz
-
-# 编辑器与系统
-.vscode/*
-!.vscode/extensions.json
-.idea/
-.DS_Store
-Thumbs.db

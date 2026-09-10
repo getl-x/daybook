@@ -10,7 +10,7 @@
  * 也可以塞进 Docker 镜像里零额外依赖运行。若日后要换 argon2id，
  * 只需替换 hashPassword / verifyPassword 的实现——哈希串自带算法前缀。
  *
- * 设计取舍（见 docs/development-plan.md §6.2、§10）：
+ * 设计取舍（见 DAYBOOK-DESIGN.zh-CN.md §6.2、§10）：
  *  - 口令做 NFKC 归一化后再哈希：iOS/Android 键盘容易产出等价但字节不同的字符串；
  *  - 登录失败一律返回同一个错误（不区分"用户不存在"与"密码错"），并且用户不存在时
  *    也跑一次 KDF，避免时序侧信道暴露用户名是否存在。

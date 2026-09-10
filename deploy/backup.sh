@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # daybook 数据库备份：pg_dump（自定义格式，自带压缩）→ 本地目录 → 可选 rsync 到异地。
 #
-# 用法（在项目目录里，和 compose.yml 同级）：
-#   bash scripts/backup.sh                    # 备份到 ./backups，保留 14 天
-#   BACKUP_DIR=/mnt/backup/daybook bash scripts/backup.sh
-#   KEEP_DAYS=30 RSYNC_TARGET=user@host:/path/ bash scripts/backup.sh
+# 用法（在仓库根目录执行；脚本自己会 cd 到仓库根）：
+#   bash deploy/backup.sh                    # 备份到 ./backups，保留 14 天
+#   BACKUP_DIR=/mnt/backup/daybook bash deploy/backup.sh
+#   KEEP_DAYS=30 RSYNC_TARGET=user@host:/path/ bash deploy/backup.sh
 #
 # 放进 crontab（每天 04:30，避开提醒高峰；日记日 04:00 切换）：
-#   30 4 * * * cd /opt/daybook && bash scripts/backup.sh >> /var/log/daybook-backup.log 2>&1
+#   30 4 * * * cd /opt/daybook && bash deploy/backup.sh >> /var/log/daybook-backup.log 2>&1
 #
 # 恢复（⚠️ 会覆盖现有数据，先停应用容器）：
 #   docker compose stop app

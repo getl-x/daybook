@@ -1,7 +1,7 @@
 /**
  * daybook · 时间与"日记日"计算（前后端共用，零依赖）
  *
- * 规则见 docs/development-plan.md §5。三条铁律：
+ * 规则见 DAYBOOK-DESIGN.zh-CN.md §5。三条铁律：
  *  1. "日记日"从本地时间 dayStartHour（默认 04:00）起算，04:00 之前的写入归属前一天；
  *  2. 时区一律用 IANA 名称（如 Asia/Shanghai），不使用固定偏移；
  *  3. DST 安全——目标墙上时间不存在（春季跳变）时顺延一个跳变间隔；

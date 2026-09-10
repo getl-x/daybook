@@ -1,11 +1,11 @@
 # daybook：应用 + 数据库
 #
 # 只包含 app 与 db 两个服务——**反代与 TLS 由你自己部署**（nginx / caddy 等），
-# 反代目标：http://127.0.0.1:8090（见 docs/development-plan.md §7.1）。
+# 反代目标：http://127.0.0.1:8090（见 DAYBOOK-DESIGN.zh-CN.md §7.1）。
 #
-# 用法：
-#   cp .env.example .env && 改里面的值
-#   docker compose up -d
+# 用法（都在仓库根目录执行）：
+#   cp deploy/daybook.env.example .env && 改里面的值
+#   DAYBOOK_IMAGE=daybook:dev docker compose up -d
 #   curl -s http://127.0.0.1:8090/healthz
 
 services:

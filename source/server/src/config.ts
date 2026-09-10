@@ -1,7 +1,7 @@
 /**
  * 环境变量解析。
  *
- * 原则（见 docs/development-plan.md §13.13）：关键项缺失时**明确报错**，
+ * 原则（见 DAYBOOK-DESIGN.zh-CN.md §13.13）：关键项缺失时**明确报错**，
  * 绝不静默用默认值把服务启动起来——部署时最怕的就是"起来了但连的是错的库"。
  */
 export type NodeEnv = 'development' | 'test' | 'production';

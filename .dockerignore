@@ -1,38 +1,32 @@
-# 构建镜像时忽略的东西：镜像里只要有源码 + 依赖 + 前端产物
-node_modules
-**/node_modules
-.git
-.github
-.reasonix
-.vscode
-.idea
+# 白名单式 .dockerignore：除了下面显式放行的，一律不进构建上下文。
+#
+# 镜像里只需要「源码 + 依赖 + 前端产物」，所以文档、密钥、本地产物、备份都不上传。
+# 写法与 .gitignore 保持一致（默认拒绝 + 白名单），改任一边时记得对照另一边。
 
-# 文档与示例
-docs
-*.md
-!README.md
+# 默认忽略全部
+*
+!source/
+!source/**
 
-# 本地配置与密钥（绝不进镜像）
-.env
-.env.*
-!.env.example
-*.jks
-*.keystore
-keystore.properties
+# 依赖与构建产物（镜像里自己 npm ci / vite build）
+source/**/node_modules/
+source/**/dist/
+source/**/coverage/
+source/**/test-results/
+source/**/playwright-report/
+source/**/.vite/
+source/**/.cache/
+source/**/*.tsbuildinfo
 
-# 备份与测试产物
+# 本地密钥（绝不进镜像）
+source/**/.env
+source/**/.env.*
+!source/**/.env.example
+source/**/*.jks
+source/**/*.keystore
+source/**/keystore.properties
+
+# 备份与测试数据
+backups/
 *.dump
 *.sql.gz
-coverage
-test-results
-playwright-report
-
-# 前端构建产物：镜像里由 web-builder 阶段自己构建，
-# 带上宿主机的 web/dist 会污染构建上下文（Tailwind 会扫到旧产物里的类名）
-web/dist
-**/dist
-
-# 编排文件本身
-compose.yml
-Dockerfile
-.dockerignore

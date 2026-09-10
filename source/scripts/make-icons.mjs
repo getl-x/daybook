@@ -1,7 +1,7 @@
 /**
  * 生成 PWA 图标（192 / 512 的 PNG），零依赖——手写 PNG 编码 + 简单光栅化。
  *
- *   node tools/make-icons.mjs
+ *   node source/scripts/make-icons.mjs
  *
  * 图案：深色圆角方块 + 浅色"书页" + 三条横线（日记本意象）。
  * 想换图标就改下面的颜色/尺寸后重跑；产物在 web/public/icons/。
