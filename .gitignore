@@ -1,0 +1,30 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# 环境与密钥（.env 含 DATABASE_URL / JWT_SECRET / VAPID 私钥）
+.env
+.env.*
+!.env.example
+
+# 日志与测试产物
+*.log
+npm-debug.log*
+coverage/
+playwright-report/
+test-results/
+
+# 数据库备份（不要在仓库里存日记数据）
+backups/
+*.dump
+*.sql.gz
+
+# 编辑器与系统
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

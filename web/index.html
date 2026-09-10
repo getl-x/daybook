@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>daybook</title>
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- 浏览器默认会去要 /favicon.ico（不存在 → 控制台一条 404）；显式声明省掉它 -->
+    <link rel="icon" href="/icons/icon-192.png" type="image/png" />
+    <meta name="theme-color" content="#0f172a" />
+
+    <!-- iOS：添加到主屏幕后的表现（见计划 §8.4） -->
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="daybook" />
+    <meta name="mobile-web-app-capable" content="yes" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

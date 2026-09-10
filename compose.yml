@@ -1,0 +1,63 @@
+# daybook：应用 + 数据库
+#
+# 只包含 app 与 db 两个服务——**反代与 TLS 由你自己部署**（nginx / caddy 等），
+# 反代目标：http://127.0.0.1:8090（见 docs/development-plan.md §7.1）。
+#
+# 用法：
+#   cp .env.example .env && 改里面的值
+#   docker compose up -d
+#   curl -s http://127.0.0.1:8090/healthz
+
+services:
+  db:
+    image: postgres:16-alpine
+    # 小机器（3C/4G）参数
+    command:
+      - postgres
+      - -c
+      - shared_buffers=384MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - max_connections=20
+      - -c
+      - wal_compression=on
+    environment:
+      POSTGRES_DB: daybook
+      POSTGRES_USER: daybook
+      # 没设置就直接报错，不静默用默认口令
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请先在 .env 里设置 POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daybook -d daybook"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # 注意：不映射任何端口到宿主机，只在 compose 网络内可见
+
+  app:
+    image: ${DAYBOOK_IMAGE:-daybook:latest}
+    build: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://daybook:${POSTGRES_PASSWORD:?}@db:5432/daybook
+      PORT: "8090"
+      NODE_ENV: production
+    ports:
+      # 只绑本机回环：给宿主上的反代用；公网访问不到 8090
+      - "127.0.0.1:8090:8090"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  pgdata:

@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  /* iOS 上避免双击缩放与橡皮筋带来的输入框跳动 */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 输入框在 iOS 上字号小于 16px 会触发自动放大 */
+input,
+textarea {
+  font-size: 16px;
+}

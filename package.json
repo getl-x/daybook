@@ -1,0 +1,19 @@
+{
+  "name": "daybook",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "私密、轻量、带固定问题引导的日记应用（自托管个人版）",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "shared",
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "test": "node --test \"shared/test/*.test.ts\" \"server/test/*.test.ts\"",
+    "test:watch": "node --test --watch \"shared/test/*.test.ts\" \"server/test/*.test.ts\""
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@daybook/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "前后端共用纯逻辑：日记日、时区、DST、提醒时刻（零依赖，只用内置 Intl）",
+  "exports": {
+    ".": "./src/time.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\""
+  }
+}
