@@ -199,4 +199,30 @@ curl -s  https://diary.example.com/v1/meta/timezones | head -c 60   # {"error":"
 
 ---
 
+## 7. 从 GHCR 拉已发布的镜像（可选）
+
+不想在本机构建、直接用 CI 已经发布好的镜像：
+
+```bash
+cd /opt/daybook
+DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.0 docker compose up -d
+```
+
+- 版本号请**手动指定**（`0.1.0` 这种），**不要用 `latest`**：`latest` 会被下一次发布覆盖，出问题不好回溯；要升级就显式换一个版本号再 `up -d`。
+- public 仓库的包可以直接拉；私有仓库先 `echo <你的 PAT> | docker login ghcr.io -u <用户名> --password-stdin`。
+- 镜像之外的东西（`.env`、反代、数据卷）和第 2、5 节一致，别漏。
+
+---
+
+## 8. 装上 Android APK（侧载）
+
+1. 打开仓库的 **Releases** 页，下载最新的 `daybook-<版本>-android-<release|debug>.apk`（需要的话用旁边的 `.sha256` 核对）。
+2. 手机设置里允许这个来源安装应用（「未知来源」/「安装未知应用」）。
+3. 打开 APK 安装 → 启动 → 用账号口令登录。
+4. **必须有一个 HTTPS 后端**：APK 里的壳把后端地址写死了（打包时由仓库变量 `DAYBOOK_SERVER_URL` 注入），且只认 HTTPS（`androidScheme: https`）。所以要先按前面几步把站点跑起来、拿到 `https://你的域名`，把它配到仓库变量再出包（见 operations.md 的「配一次」）。
+
+> 提醒现状：APK 里 **Web Push 用不了**（Capacitor 的 WebView 不支持），暂时靠「打开应用」看内容，原生本地通知列入第二迭代；浏览器里把 PWA 加到主屏则 Web Push 照常可用。
+
+---
+
 > 运维（备份/升级/排障）见 [operations.md](operations.md)。

@@ -4,7 +4,7 @@
 
 ---
 
-## 7. 备份（务必配）
+## 9. 备份（务必配）
 
 ```bash
 cd /opt/daybook
@@ -30,7 +30,7 @@ BACKUP_DIR=/mnt/backup/daybook KEEP_DAYS=30 bash deploy/backup.sh
 
 ---
 
-## 8. 升级
+## 10. 升级
 
 ```bash
 cd /opt/daybook
@@ -48,7 +48,52 @@ docker compose logs app --tail 50
 
 ---
 
-## 9. 排障清单
+## 11. 发一个新版
+
+打一个 `v*` 标签推上去，两个发布流程会同时开始：
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+随后：
+
+- `docker-publish.yml`：先构建镜像、用 compose + 真 Postgres 跑冒烟，通过后推 `ghcr.io/getl-x/daybook:v0.1.1`（带 semver 与 sha 标签，并更新 `latest`）。
+- `android-release.yml`：构建前端 → `cap sync` → 打包 APK → 建 / 更新 GitHub Release，把 `daybook-0.1.1-android-<release|debug>.apk` 与 `.sha256` 附上去，同时上传 artifact。
+
+在 **Actions** 页面看进度（点进对应的 run）；失败了点右上角 **Re-run jobs** 重跑，重跑前先修好对应的问题 —— 例如 `android-release` 缺 `DAYBOOK_SERVER_URL` 或签名 secret 时会打 `::warning::` 并退化成 debug 包。
+
+---
+
+## 12. 配一次：GitHub 上的 secrets 与变量
+
+仓库 **Settings → Secrets and variables → Actions** 里配这些东西（本机装了 `gh` 也可以直接命令行设）：
+
+**变量（Variables）** —— 后端地址，APK 构建时注入：
+
+```bash
+gh variable set DAYBOOK_SERVER_URL --body 'https://你的域名'
+```
+
+**Secrets** —— 可选。配了就出正式签名包，没配自动退化成 debug 签名包。用你现有的 `.jks`：
+
+```bash
+keytool -list -v -keystore 你的.jks        # 看 keyAlias（顺便确认口令对）
+base64 -w0 你的.jks > keystore.b64
+gh secret set ANDROID_KEYSTORE_BASE64 < keystore.b64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS
+gh secret set ANDROID_KEY_PASSWORD
+rm keystore.b64                            # 别把 base64 文件留在本地
+```
+
+- 四个 secret 缺任意一个，`android-release.yml` 就退化成 **debug 签名包**：能装能测，但密钥是公开的调试密钥，**不能当正式版升级**（换正式包要卸载重装）。
+- 仓库里只有 `source/web/android/keystore.properties.example`；真实的 `.jks` 与 `keystore.properties` 都不进仓库（`.gitignore` 已排除）。
+
+---
+
+## 13. 排障清单
 
 **容器起不来**
 
@@ -88,7 +133,7 @@ docker compose logs app | grep "提醒 tick 完成"
 
 ---
 
-## 10. 安全清单（部署后自查）
+## 14. 安全清单（部署后自查）
 
 - [ ] `https://` 能开、`http://` 会跳转；证书自动续期已启用（`systemctl list-timers | grep certbot`）。
 - [ ] 8090 **只**绑在 `127.0.0.1`（`ss -ltnp | grep 8090` 应显示 127.0.0.1），公网直接访问 `IP:8090` 不通。
@@ -100,7 +145,7 @@ docker compose logs app | grep "提醒 tick 完成"
 
 ---
 
-## 11. 卸载 / 迁移
+## 15. 卸载 / 迁移
 
 ```bash
 # 停掉但保留数据

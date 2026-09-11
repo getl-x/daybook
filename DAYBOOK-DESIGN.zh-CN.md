@@ -443,23 +443,24 @@ source/web/src/
 
 Manifest（`display: standalone`）+ Service Worker（应用壳与最近日记缓存）；`/v1/*` 不缓存；通知点击深链到对应栏目（`#morning` / `#evening`）。
 
-### 9.4 Android APK（第二迭代）
+### 9.4 Android APK（Capacitor 壳）
 
-- **Capacitor** 包壳，复用同一套前端；`android/` 目录独立提交；
-- **签名密钥用你现有的 `.jks`**：密钥文件放**仓库外**（例如 `~/keys/daybook-release.jks`，另存一份备份）；仓库里只放 `android/keystore.properties.example`，真实的 `android/keystore.properties` 写进 `.gitignore`：
+**已实现**（2026-09-11）：
 
-  ```properties
-  storeFile=/root/keys/daybook-release.jks
-  storePassword=……
-  keyAlias=……
-  keyPassword=……
-  ```
+- **Capacitor 8.5.1** 包壳，复用同一套前端；工程在 `source/web/android/`（appId `com.getlx.daybook`，minSdk 24 / compileSdk 36 / targetSdk 36，`androidScheme: https` → 必须 HTTPS 后端）；
+- **APK 内置前端资源**：前端产物打包进 APK，离线也能打开应用壳；因此前端每次改动要重发一版 APK（个人使用可以接受）；
+- **后端地址构建时注入**：前端读 `VITE_DAYBOOK_SERVER_URL`（由仓库变量 `DAYBOOK_SERVER_URL` 注入）；WebView 的源是 `https://localhost`，所以必须用绝对地址；
+- **服务端 CORS**：默认放行 `https://localhost` 与 `capacitor://localhost`，可用环境变量 `CORS_ORIGINS`（逗号分隔）覆盖；不开 credentials，令牌仍走 `Authorization` 头；
+- **CI 出包**：`.github/workflows/android-release.yml` 打 `v*` 标签 → 构建前端 + `cap sync` + gradle 打包 → 把 `daybook-<版本>-android-<release|debug>.apk` 与 `.sha256` 附到 GitHub Release；
+- **签名**：用你现有的 `.jks`（密钥文件放**仓库外**，仓库里只放 `source/web/android/keystore.properties.example`）；配了 secrets 出正式包，**没配就自动退化成 debug 签名包**（能装能测，但密钥是公开的调试密钥，不能当正式版升级）。命令见 `android-release.yml` 与运维手册。
 
-  `android/app/build.gradle` 读这个文件生成 signingConfig；**具体命令我在做到这一步时给你**（`keytool -list` 校验、`assembleRelease`、`apksigner verify`、附到 GitHub Releases）；
-- **APK 内置前端资源**（默认方案，可离线打开应用壳）；因此前端每次改动需要重发一版 APK —— 个人使用可以接受；若嫌麻烦，改 `server.url` 远程加载是"一行配置"的事，但会失去离线壳；
-- **本地通知**：`@capacitor/local-notifications` 登记每天两条提醒（`allowWhileIdle`），在登录、改提醒时间、设备重启、应用升级后**重新登记**；Android 12+ 的精确闹钟权限需要引导授权，未授权时是"大致时间"；
-- **分发**：`npm run android:release` → 构建 web + `cap sync` + `assembleRelease` → 产物与 changelog 上传 **GitHub Releases**（不上架任何商店）；
-- 认证复用 Bearer Token（WebView 里不用 cookie），令牌存 Keychain/Keystore 插件而非明文 Preferences。
+**仍留第二迭代**：
+
+- **原生本地通知**：`@capacitor/local-notifications` 登记每天两条提醒（`allowWhileIdle`），在登录、改提醒时间、设备重启、应用升级后**重新登记**；Android 12+ 的精确闹钟权限需要引导授权，未授权时是"大致时间"。当前 APK **没有提醒** —— Web Push 在 Capacitor 的 WebView 里用不了；
+- **应用图标**：仍是 Capacitor 默认图标；
+- **iOS**：未做。
+
+> 本地出包（需 JDK 21 + Android SDK）：`cd source/web && npm run android:sync && cd android && ./gradlew assembleDebug`。
 
 ---
 
@@ -760,7 +761,8 @@ npm run android:release                            # 构建 web + cap sync + ass
 
 已验证：
 
-- `npm test` 174/174 通过；`typecheck`（server 与 web）无错；`build -w @daybook/web` 通过。
+- `npm test` 189/189 通过（2026-09-11 这一轮新增 9 条 CORS 用例）；`typecheck`（server 与 web）无错；`build -w @daybook/web` 通过。
+- 跨源（CORS）实测：带 `Origin: https://localhost` 时响应含 `access-control-allow-origin: https://localhost`，其它源不含；预检 `OPTIONS /v1/diaries/:date` 返回 204。
 - 容器冒烟：镜像构建通过、两容器 healthy、`/healthz` 200、缺失 `/assets/*` 返回 404、SPA 路径 200、`/v1/meta/timezones` 401、容器内 `uid=1000(node)`；启动日志可见“迁移完成：应用 1 个，跳过 1 个（0001_account_deletion.sql）”与“前端产物已挂载”。
 - 账号删除端到端（容器内真实 HTTP）：登录 200 → 口令错 401 → 口令对 204 → 同令牌再用 401 → 库中 `status=pending_deletion`。
 - 提醒调度端到端（容器内真实 Postgres + web-push）：强制一条到期排程后，失败重试 attempts 1→2→3、排程不前进，第 4 个 tick 才推进到次日 08:30；全程 `notification_deliveries` 只有 1 行（幂等键生效）。

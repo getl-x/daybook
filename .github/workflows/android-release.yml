@@ -1,0 +1,170 @@
+name: Publish Android APK
+run-name: daybook ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }} · Android APK
+
+# 触发时机：打 v* 标签，或手动指定 release tag。
+# 形态：Capacitor 壳 + 打包进 APK 的前端产物（离线也能打开应用壳），
+#       后端地址在构建时由仓库变量 DAYBOOK_SERVER_URL 注入（VITE_DAYBOOK_SERVER_URL）。
+# 签名：配了 ANDROID_KEYSTORE_BASE64 等 secret 就用你的 .jks 出正式包；
+#       没配就退化成 debug 签名包（能装、能测，只是密钥是公开的调试密钥）。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: GitHub release tag，例如 v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      # 仓库变量（Settings → Variables），形如 https://daybook.example.com，不要带结尾斜杠
+      VITE_DAYBOOK_SERVER_URL: ${{ vars.DAYBOOK_SERVER_URL }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      DAYBOOK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      DAYBOOK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      DAYBOOK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      DAYBOOK_KEYSTORE_PATH: ${{ github.workspace }}/.release/daybook-release.jks
+      # Android 的 versionCode 必须单调递增，直接用 run_number
+      DAYBOOK_VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: 检查签名与服务器地址
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VITE_DAYBOOK_SERVER_URL:-}" ]; then
+            echo "::warning::仓库变量 DAYBOOK_SERVER_URL 没设——这个 APK 里没有后端地址，装上也连不上服务器"
+          fi
+          signable=true
+          for name in ANDROID_KEYSTORE_BASE64 DAYBOOK_KEYSTORE_PASSWORD DAYBOOK_KEY_ALIAS DAYBOOK_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::warning::缺少 secret ${name}，这次出 debug 签名包"
+              signable=false
+            fi
+          done
+          echo "SIGNABLE=$signable" >> "$GITHUB_ENV"
+
+      - name: Install JavaScript dependencies
+        working-directory: source
+        run: npm ci
+
+      - name: 解出签名密钥并写 keystore.properties
+        if: env.SIGNABLE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$DAYBOOK_KEYSTORE_PATH")"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$DAYBOOK_KEYSTORE_PATH"
+          chmod 600 "$DAYBOOK_KEYSTORE_PATH"
+          cat > source/web/android/keystore.properties <<EOF
+          storeFile=$DAYBOOK_KEYSTORE_PATH
+          storePassword=$DAYBOOK_KEYSTORE_PASSWORD
+          keyAlias=$DAYBOOK_KEY_ALIAS
+          keyPassword=$DAYBOOK_KEY_PASSWORD
+          EOF
+          chmod 600 source/web/android/keystore.properties
+
+      - name: 从 tag 推版本号
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          if [ -z "$version" ] || [ "$version" = "$RELEASE_TAG" ]; then
+            echo "release tag 必须以 v 开头，例如 v0.1.0" >&2
+            exit 1
+          fi
+          echo "DAYBOOK_VERSION_NAME=$version" >> "$GITHUB_ENV"
+
+      - name: 构建前端并同步进 Android 工程
+        working-directory: source
+        run: npm run android:sync --workspace @daybook/web
+
+      - name: 打包 APK
+        working-directory: source/web/android
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          if [ "$SIGNABLE" = "true" ]; then
+            ./gradlew --no-daemon assembleRelease
+          else
+            ./gradlew --no-daemon assembleDebug
+          fi
+
+      - name: 收集产物（含 sha256）
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          if [ "$SIGNABLE" = "true" ]; then
+            src="source/web/android/app/build/outputs/apk/release/app-release.apk"
+            flavor="release"
+          else
+            src="source/web/android/app/build/outputs/apk/debug/app-debug.apk"
+            flavor="debug"
+          fi
+          out="release/daybook-${DAYBOOK_VERSION_NAME}-android-${flavor}.apk"
+          cp "$src" "$out"
+          ( cd release && sha256sum "$(basename "$out")" > "$(basename "$out").sha256" )
+          ls -la release
+
+      - name: 上传 workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daybook-apk-${{ env.DAYBOOK_VERSION_NAME }}
+          path: release/*
+          if-no-files-found: error
+
+      - name: 建/更新 GitHub Release 并附上 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --generate-notes --title "daybook $RELEASE_TAG"
+          fi
+          gh release upload "$RELEASE_TAG" release/* --clobber
+
+      - name: 装完后提示怎么填服务器地址
+        shell: bash
+        run: |
+          {
+            echo "### daybook Android APK"
+            echo
+            echo "- 标签：\`$RELEASE_TAG\`"
+            echo "- 后端地址：\`${VITE_DAYBOOK_SERVER_URL:-（未设置！装上也连不上）}\`"
+            echo "- 签名：$([ "$SIGNABLE" = "true" ] && echo '你的 .jks（正式包）' || echo 'debug 密钥（临时包）')"
+            echo "- 下载：Release 页面里的 \`.apk\` 与 \`.sha256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 清掉签名材料
+        if: always()
+        shell: bash
+        run: rm -f "$DAYBOOK_KEYSTORE_PATH" source/web/android/keystore.properties

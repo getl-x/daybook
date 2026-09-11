@@ -59,12 +59,14 @@
 !/docs/en/
 !/docs/en/**
 
-# —— GitHub Actions（只放行 CI）——
+# —— GitHub Actions（放行 CI 与两个发布流程）——
 !/.github/
 /.github/*
 !/.github/workflows/
 /.github/workflows/*
 !/.github/workflows/ci.yml
+!/.github/workflows/docker-publish.yml
+!/.github/workflows/android-release.yml
 
 # —— 本地密钥与运行数据（永不入库）——
 /.env

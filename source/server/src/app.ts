@@ -16,6 +16,7 @@
  *  - 设置与推送订阅的接口在 routes-notifications.ts，这里注册进去（共用同一个 authenticate）。
  */
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import cors from '@fastify/cors';
 
 import {
   ACCESS_TOKEN_TTL_SECONDS,
@@ -30,7 +31,7 @@ import {
   verifyAccessToken,
   verifyPassword,
 } from './auth.ts';
-import type { Config } from './config.ts';
+import { DEFAULT_CORS_ORIGINS, type Config } from './config.ts';
 import {
   DiaryError,
   INCIDENT_TAGS,
@@ -216,6 +217,15 @@ export function buildApp({ config, store, now = () => new Date() }: BuildAppOpti
     // 容器只监听回环/容器网络，前面一定有一层反代（见计划 §7.1）：
     // 不开里这个开关，request.ip 永远是反代的地址，登录限流会变成"所有人共用一个桶"。
     trustProxy: true,
+  });
+
+  // 跨源：浏览器里的 PWA 与后端同源，用不到；Android APK 的 WebView 源是 https://localhost。
+  // 只放行名单里的源（默认见 DEFAULT_CORS_ORIGINS），不开 credentials（令牌走 Authorization 头）。
+  void app.register(cors, {
+    origin: [...(config.corsOrigins ?? DEFAULT_CORS_ORIGINS)],
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['authorization', 'content-type'],
+    maxAge: 86400,
   });
 
   const perUsername = new LoginRateLimiter(5, 15 * 60 * 1000);

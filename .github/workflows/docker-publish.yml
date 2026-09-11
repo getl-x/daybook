@@ -1,0 +1,153 @@
+name: Publish Docker image
+run-name: daybook ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }} · 镜像
+
+# 触发时机：打 v* 标签，或手动指定标签。
+# 推镜像前先用 compose 跑一次真数据库的冒烟（构建出的镜像有问题就不发）。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 镜像标签（手动触发用）
+        required: true
+        default: edge
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      SMOKE_IMAGE: daybook:ci
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 冒烟用的 .env：只是 CI 里的假值，真实部署由使用者自己填（见 deploy/daybook.env.example）
+      - name: Write throwaway .env for the smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > .env <<'ENVEOF'
+          POSTGRES_PASSWORD=ci-only-not-a-real-password
+          JWT_SECRET=ci-only-not-a-real-secret-0123456789abcdef
+          PORT=8090
+          NODE_ENV=production
+          LOG_LEVEL=info
+          ENVEOF
+
+      - name: Build image (linux/amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          platforms: linux/amd64
+          tags: ${{ env.SMOKE_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test with a real Postgres (compose)
+        shell: bash
+        env:
+          DAYBOOK_IMAGE: ${{ env.SMOKE_IMAGE }}
+        run: |
+          set -euo pipefail
+          cleanup() { docker compose logs --no-color app || true; docker compose down -v || true; }
+          trap cleanup EXIT
+
+          DAYBOOK_IMAGE="$SMOKE_IMAGE" docker compose up -d --quiet-pull
+
+          code=""
+          for _ in $(seq 1 45); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/healthz || true)"
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          if [ "$code" != "200" ]; then
+            echo "healthz 期望 200，实际 $code" >&2
+            exit 1
+          fi
+
+          # 迁移真的跑过、前端产物真的挂上了
+          docker compose logs --no-color app | grep -q "迁移完成" || { echo "看不到迁移日志" >&2; exit 1; }
+          docker compose logs --no-color app | grep -q "前端产物已挂载" || { echo "看不到前端产物日志" >&2; exit 1; }
+
+          # 缺失的资源必须 404（不能回 SPA 的 200 HTML）；受保护接口必须 401
+          assets="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/assets/does-not-exist.js)"
+          [ "$assets" = "404" ] || { echo "/assets/* 期望 404，实际 $assets" >&2; exit 1; }
+          meta="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/v1/meta/timezones)"
+          [ "$meta" = "401" ] || { echo "/v1/meta/timezones 期望 401，实际 $meta" >&2; exit 1; }
+          spa="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/day/2026-01-01)"
+          [ "$spa" = "200" ] || { echo "SPA 路径期望 200，实际 $spa" >&2; exit 1; }
+
+          # CLI 在镜像里可用（路径是 /app/server/...，见 Dockerfile）
+          docker compose exec -T app node server/src/cli/user.ts list >/dev/null
+
+          # 非 root 运行
+          uid="$(docker run --rm --entrypoint sh "$SMOKE_IMAGE" -c 'id -u')"
+          [ "$uid" = "1000" ] || { echo "容器应以 uid 1000 运行，实际 $uid" >&2; exit 1; }
+
+          echo "冒烟通过：healthz 200 / assets 404 / 受保护接口 401 / SPA 200 / 非 root uid=$uid"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=sha,prefix=sha-
+
+      # 只出 linux/amd64：目标是你自己的 VPS。要加 arm64 就在 platforms 里补上（会慢不少）。
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### daybook 镜像已发布"
+            echo
+            echo '```'
+            echo "${{ steps.metadata.outputs.tags }}"
+            echo '```'
+            echo
+            echo "VPS 上拉取："
+            echo
+            echo '```bash'
+            echo "docker pull $(echo "${{ steps.metadata.outputs.tags }}" | head -1)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

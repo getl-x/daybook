@@ -12,7 +12,7 @@
 | 1. 仓库骨架与地基 | ✅ npm workspaces、迁移、用户名+口令认证（scrypt + JWT + refresh 轮转）、Docker 镜像与 compose |
 | 2. 日记核心 | ✅ 今日页（含昨日回顾）、日历页、单日详情与补写、突发事情、字段级保存与冲突提示、离线草稿 |
 | 3. 通知（Web Push） | ✅ 设置页（提醒时间/开关/时区/日界）、每分钟排程 tick、订阅管理、iOS 安装引导页 |
-| 4. 测试与上线 | 进行中：180 个用例全绿、容器冒烟通过；剩真实设备推送验证、导出（第二迭代） |
+| 4. 测试与上线 | 进行中：189 个用例全绿、容器冒烟通过；Android 壳（Capacitor）已能出包；剩真实设备推送验证、导出（第二迭代） |
 
 ## 目录约定
 
@@ -32,6 +32,8 @@ daybook/
     ├── shared/                 前后端共用纯逻辑（零依赖）：time.ts
     ├── server/                 后端：Node 24 直跑 TS + Fastify + PostgreSQL（src/、migrations/、test/）
     ├── web/                    前端：React + Vite + Tailwind（PWA）
+    │   ├── capacitor.config.ts Capacitor（Android 壳）配置
+    │   └── android/            Capacitor 生成的 Android 工程（构建产物不入库）
     └── scripts/                构建/资源脚本（make-icons.mjs）
 ```
 
@@ -79,6 +81,27 @@ DAYBOOK_IMAGE=daybook:dev docker compose up -d   # 或 docker build -t daybook:d
 - 应用容器**固定监听 8090**，只映射到宿主 `127.0.0.1:8090`；TLS 与反代（nginx/caddy）由你自己部署。
 - 镜像里**不含** caddy/TLS/反代；容器以非 root（`node`）运行；数据库只在 compose 内网，不映射端口。
 - 生成 VAPID 密钥：`npx web-push generate-vapid-keys`，写进 `.env`（不配也能启动，只是提醒发不出去，日志会提示）。
+
+## 发布（GitHub Actions）
+
+三个 workflow 都在 `.github/workflows/`，push / 打标签自动跑（也能在 Actions 页面手动触发）：
+
+| workflow | 触发 | 产物 |
+| --- | --- | --- |
+| `ci.yml` | push / PR 到 `main` | typecheck（server + web）+ 全部用例 + 前端构建（只验证，不出产物） |
+| `docker-publish.yml` | 推 `v*` 标签（或手动） | 先用 compose + 真 Postgres 跑冒烟（healthz 200 / 缺失资源 404 / 受保护接口 401 / 非 root），通过后把镜像推到 `ghcr.io/getl-x/daybook` |
+| `android-release.yml` | 推 `v*` 标签（或手动） | 构建前端 → `cap sync` → gradle 打包 → 把 `daybook-<版本>-android-<release\|debug>.apk` 与 `.sha256` 附到 GitHub Release，同时上传 artifact |
+
+**拉已发布的镜像**（public 仓库的包可直接拉，无需登录）：
+
+```bash
+docker pull ghcr.io/getl-x/daybook:0.1.0
+DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.0 docker compose up -d
+```
+
+**装 Android APK**：到仓库的 Releases 页下载 `.apk`（可选核对 `.sha256`）→ 手机允许「未知来源安装」→ 安装后用账号口令登录。APK 里已内置前端资源（离线能打开壳），后端地址在构建时由仓库变量 `DAYBOOK_SERVER_URL` 注入，所以**必须配一个 HTTPS 后端**才能连上。
+
+> APK 里 **Web Push 用不了**（Capacitor 的 WebView 不支持），暂时靠「打开应用」看内容；浏览器把 PWA 加到主屏则 Web Push 照常可用。原生本地通知列入第二迭代。
 
 ## 账号管理（CLI）
 

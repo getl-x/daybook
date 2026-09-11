@@ -22,6 +22,17 @@ export interface Config {
   logLevel: string;
   /** 没配就为 null——通知功能启用前必须补上 */
   vapid: VapidConfig | null;
+  /**
+   * 允许跨源访问本 API 的源（CORS）。
+   *
+   * 浏览器里的 PWA 与后端同源，用不上它；**Android APK** 的 WebView 源是
+   * `https://localhost`，必须在这里放行（见 DEFAULT_CORS_ORIGINS）。
+   * 可用 `CORS_ORIGINS` 覆盖（逗号分隔）来额外放行别的源。
+   *
+   * 可选是为了让测试里的 Config 字面量不必每个都补这个字段；
+   * `loadConfig` 一定会给出值，`app.ts` 对缺省值回退到 DEFAULT_CORS_ORIGINS。
+   */
+  corsOrigins?: readonly string[];
 }
 
 export class ConfigError extends Error {
@@ -33,6 +44,13 @@ export class ConfigError extends Error {
 
 export const DEFAULT_PORT = 8090;
 const MIN_JWT_SECRET_LENGTH = 32;
+
+/**
+ * 默认放行的跨源源：Capacitor 壳（Android APK / 未来的 iOS）里的 WebView
+ * 用 `https://localhost`（`androidScheme: https`）；iOS 侧是 `capacitor://localhost`。
+ * 浏览器里的 PWA 与后端同源，压根不会用到 CORS。
+ */
+export const DEFAULT_CORS_ORIGINS: readonly string[] = ['https://localhost', 'capacitor://localhost'];
 
 type Env = Record<string, string | undefined>;
 
@@ -80,6 +98,29 @@ function parseVapid(env: Env): VapidConfig | null {
   };
 }
 
+/**
+ * CORS_ORIGINS：逗号分隔的源名单；不配就用默认（Capacitor 壳那两条）。
+ * 写错的项直接报错——CORS 名单静默写宽了比报错危险得多。
+ */
+function parseCorsOrigins(raw: string | undefined): readonly string[] {
+  if (raw === undefined || raw.trim() === '') return DEFAULT_CORS_ORIGINS;
+
+  const origins = raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin !== '');
+  if (origins.length === 0) return DEFAULT_CORS_ORIGINS;
+
+  for (const origin of origins) {
+    if (!/^(https?:\/\/|capacitor:\/\/)[^\s]+$/.test(origin)) {
+      throw new ConfigError(
+        `CORS_ORIGINS 里有一项不是合法的源：${origin}（示例：https://localhost,https://diary.example.com）`,
+      );
+    }
+  }
+  return origins;
+}
+
 export function loadConfig(env: Env = process.env): Config {
   const nodeEnv = parseNodeEnv(env.NODE_ENV);
   const port = parsePort(env.PORT);
@@ -94,5 +135,5 @@ export function loadConfig(env: Env = process.env): Config {
 
   const logLevel = env.LOG_LEVEL?.trim() || (nodeEnv === 'test' ? 'silent' : 'info');
 
-  return { nodeEnv, port, databaseUrl, jwtSecret, logLevel, vapid: parseVapid(env) };
+  return { nodeEnv, port, databaseUrl, jwtSecret, logLevel, vapid: parseVapid(env), corsOrigins: parseCorsOrigins(env.CORS_ORIGINS) };
 }

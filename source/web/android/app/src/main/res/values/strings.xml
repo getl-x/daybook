@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">daybook</string>
+    <string name="title_activity_main">daybook</string>
+    <string name="package_name">com.getlx.daybook</string>
+    <string name="custom_url_scheme">com.getlx.daybook</string>
+</resources>

@@ -20,6 +20,20 @@ export interface Session {
 
 const STORAGE_KEY = 'daybook.session.v1';
 
+/**
+ * 后端地址：浏览器里的 PWA 与后端同源，留空即可（相对路径）。
+ * Android APK（Capacitor，WebView 的源是 https://localhost）必须用绝对地址，
+ * 在打包时由 `VITE_DAYBOOK_SERVER_URL` 注入（见 .github/workflows/android-release.yml）。
+ */
+const API_BASE = String(import.meta.env.VITE_DAYBOOK_SERVER_URL ?? '')
+  .trim()
+  .replace(/\/+$/, '');
+
+/** 把接口路径拼成真正要请求的地址（API_BASE 为空时就是原来的相对路径） */
+function apiUrl(path: string): string {
+  return API_BASE === '' ? path : `${API_BASE}${path}`;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -97,7 +111,7 @@ function sessionFromLoginBody(body: {
 }
 
 export async function login(username: string, password: string): Promise<Session> {
-  const response = await fetch('/v1/auth/login', {
+  const response = await fetch(apiUrl('/v1/auth/login'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ username, password }),
@@ -119,7 +133,7 @@ async function refreshSession(): Promise<Session | null> {
 
   refreshing = (async () => {
     try {
-      const response = await fetch('/v1/auth/refresh', {
+      const response = await fetch(apiUrl('/v1/auth/refresh'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ refreshToken: current.refreshToken }),
@@ -145,7 +159,7 @@ async function send(path: string, init: RequestInit, token: string | null): Prom
   const headers = new Headers(init.headers);
   if (token) headers.set('authorization', `Bearer ${token}`);
   if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
-  return await fetch(path, { ...init, headers });
+  return await fetch(apiUrl(path), { ...init, headers });
 }
 
 /**
@@ -180,7 +194,7 @@ export async function logout(): Promise<void> {
   clearSession();
   if (!session) return;
   try {
-    await fetch('/v1/auth/logout', {
+    await fetch(apiUrl('/v1/auth/logout'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ refreshToken: session.refreshToken }),
@@ -325,7 +339,7 @@ export const INCIDENT_TAG_LABELS: Record<IncidentTag, string> = {
 /* ------------------------------- 接口封装 ------------------------------- */
 
 export async function fetchHealth(): Promise<Health> {
-  const response = await fetch('/healthz');
+  const response = await fetch(apiUrl('/healthz'));
   return (await response.json()) as Health;
 }
 
