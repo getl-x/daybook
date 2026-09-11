@@ -4,6 +4,7 @@ import { AppShell } from '../components/AppShell.tsx';
 import { Banner } from '../components/ui.tsx';
 import {
   ApiError,
+  clearSession,
   deleteAccount,
   deleteSubscription,
   fetchNotificationStatus,
@@ -14,6 +15,7 @@ import {
   type Session,
   type SettingsView,
 } from '../lib/api.ts';
+import { isNativeShell, isValidServerBase, normalizeServerBase, saveServerBase, serverBase } from '../lib/server.ts';
 import { NOTIFICATION_STATE_LABELS, notificationState, type NotificationState } from '../lib/device.ts';
 import { subscribeToPush, unsubscribeFromPush } from '../lib/push.ts';
 
@@ -32,6 +34,9 @@ export function SettingsPage({ session, onLogout }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
+  const native = isNativeShell();
+  const [serverDraft, setServerDraft] = useState(() => serverBase());
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const reload = useCallback(async (): Promise<void> => {
     try {
@@ -94,6 +99,25 @@ export function SettingsPage({ session, onLogout }: Props) {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** 切换服务器：保存后清掉本地会话并回到登录页（旧会话已不属于新服务器）。 */
+  function saveServer(): void {
+    setServerError(null);
+    const trimmed = serverDraft.trim();
+    if (trimmed === '' || !isValidServerBase(trimmed)) {
+      setServerError('要填以 https:// 开头的完整地址');
+      return;
+    }
+    const next = normalizeServerBase(trimmed);
+    if (next === serverBase()) {
+      setNotice('服务器地址没有变化');
+      return;
+    }
+    saveServerBase(next);
+    clearSession();
+    window.alert('已切换服务器，请重新登录');
+    onLogout();
   }
 
   const reminders = settings?.reminders;
@@ -306,6 +330,50 @@ export function SettingsPage({ session, onLogout }: Props) {
             <p className="text-xs text-slate-400">
               改时区或日界会立刻重算提醒排程；已经写下的日记日期不会被追溯修改。
             </p>
+          </section>
+
+          <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">服务器地址</h2>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500 dark:text-slate-400">当前生效</dt>
+                <dd className="text-right font-medium text-slate-800 dark:text-slate-100">
+                  {serverBase() || '与网页同源（默认）'}
+                </dd>
+              </div>
+            </dl>
+            <p className="text-xs text-slate-400">
+              构建时可用
+              <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px] dark:bg-slate-800">DAYBOOK_SERVER_URL</code>
+              预设默认值。
+            </p>
+
+            {native ? (
+              <div className="space-y-2">
+                <label className="block space-y-2">
+                  <span className="text-sm text-slate-600 dark:text-slate-300">修改服务器地址</span>
+                  <input
+                    type="url"
+                    autoComplete="off"
+                    value={serverDraft}
+                    onChange={(event) => setServerDraft(event.target.value)}
+                    placeholder="https://diary.example.com"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </label>
+                <p className="text-xs text-slate-400">
+                  自建服务器的完整地址（必须 https://）。保存后会退出登录，请重新登录。
+                </p>
+                {serverError ? <p className="text-xs text-red-600 dark:text-red-400">{serverError}</p> : null}
+                <button
+                  type="button"
+                  onClick={() => saveServer()}
+                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                >
+                  保存并重新登录
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-rose-200 dark:bg-slate-900 dark:ring-rose-900/60">

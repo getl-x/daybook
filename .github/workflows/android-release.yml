@@ -3,7 +3,7 @@ run-name: daybook ${{ github.event_name == 'workflow_dispatch' && inputs.release
 
 # 触发时机：打 v* 标签，或手动指定 release tag。
 # 形态：Capacitor 壳 + 打包进 APK 的前端产物（离线也能打开应用壳），
-#       后端地址在构建时由仓库变量 DAYBOOK_SERVER_URL 注入（VITE_DAYBOOK_SERVER_URL）。
+#       后端地址默认不绑：APK 首次启动时会要求填写；自建者可用仓库变量 DAYBOOK_SERVER_URL 预设默认值（注入 VITE_DAYBOOK_SERVER_URL）。
 # 签名：配了 ANDROID_KEYSTORE_BASE64 等 secret 就用你的 .jks 出正式包；
 #       没配就退化成 debug 签名包（能装、能测，只是密钥是公开的调试密钥）。
 on:
@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${VITE_DAYBOOK_SERVER_URL:-}" ]; then
-            echo "::warning::仓库变量 DAYBOOK_SERVER_URL 没设——这个 APK 里没有后端地址，装上也连不上服务器"
+            echo "未预设地址：APK 首次启动会要求填写服务器地址"
           fi
           signable=true
           for pair in ANDROID_KEYSTORE_BASE64:ANDROID_KEYSTORE_BASE64 \
@@ -164,7 +164,7 @@ jobs:
             echo "### daybook Android APK"
             echo
             echo "- 标签：\`$RELEASE_TAG\`"
-            echo "- 后端地址：\`${VITE_DAYBOOK_SERVER_URL:-（未设置！装上也连不上）}\`"
+            echo "- 后端地址：\`${VITE_DAYBOOK_SERVER_URL:-未预设（首次启动时填写）}\`"
             echo "- 签名：$([ "$SIGNABLE" = "true" ] && echo '你的 .jks（正式包）' || echo 'debug 密钥（临时包）')"
             echo "- 下载：Release 页面里的 \`.apk\` 与 \`.sha256\`"
           } >> "$GITHUB_STEP_SUMMARY"

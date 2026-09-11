@@ -4,6 +4,8 @@
  * 令牌放 localStorage——个人自托管场景的有意取舍：少一层会话逻辑。
  * 代价是 XSS 可直接读走令牌，因此前端不引入任何第三方脚本、不渲染未转义的 HTML。
  */
+import { serverBase } from './server.ts';
+
 export interface SessionUser {
   id: string;
   username: string;
@@ -21,17 +23,13 @@ export interface Session {
 const STORAGE_KEY = 'daybook.session.v1';
 
 /**
- * 后端地址：浏览器里的 PWA 与后端同源，留空即可（相对路径）。
- * Android APK（Capacitor，WebView 的源是 https://localhost）必须用绝对地址，
- * 在打包时由 `VITE_DAYBOOK_SERVER_URL` 注入（见 .github/workflows/android-release.yml）。
+ * 后端地址在**请求时**取值：浏览器里的 PWA 与后端同源（空 → 相对路径）；
+ * Android APK（Capacitor，WebView 的源是 https://localhost）由用户在首次启动时填写，
+ * 取值与校验规则见 ./server.ts。
  */
-const API_BASE = String(import.meta.env.VITE_DAYBOOK_SERVER_URL ?? '')
-  .trim()
-  .replace(/\/+$/, '');
-
-/** 把接口路径拼成真正要请求的地址（API_BASE 为空时就是原来的相对路径） */
 function apiUrl(path: string): string {
-  return API_BASE === '' ? path : `${API_BASE}${path}`;
+  const base = serverBase();
+  return base === '' ? path : `${base}${path}`;
 }
 
 export class ApiError extends Error {

@@ -67,7 +67,7 @@ git push origin v0.1.1
 - `docker-publish.yml`：先构建镜像、用 compose + 真 Postgres 跑冒烟，通过后推 `ghcr.io/getl-x/daybook:v0.1.1`（带 semver 与 sha 标签，并更新 `latest`）。
 - `android-release.yml`：构建前端 → `cap sync` → 打包 APK → 建 / 更新 GitHub Release，把 `daybook-0.1.1-android-<release|debug>.apk` 与 `.sha256` 附上去，同时上传 artifact。
 
-在 **Actions** 页面看进度（点进对应的 run）；失败了点右上角 **Re-run jobs** 重跑，重跑前先修好对应的问题 —— 例如 `android-release` 缺 `DAYBOOK_SERVER_URL` 或签名 secret 时会打 `::warning::` 并退化成 debug 包。
+在 **Actions** 页面看进度（点进对应的 run）；失败了点右上角 **Re-run jobs** 重跑，重跑前先修好对应的问题 —— 例如 `android-release` 缺签名 secret 时会打 `::warning::` 并退化成 debug 包（缺 `DAYBOOK_SERVER_URL` 不再是问题：APK 首次启动会要求填服务器地址）。
 
 ---
 
@@ -75,10 +75,10 @@ git push origin v0.1.1
 
 仓库 **Settings → Secrets and variables → Actions** 里配这些东西（本机装了 `gh` 也可以直接命令行设）：
 
-**变量（Variables）** —— 后端地址，APK 构建时注入：
+**变量（Variables）** —— 后端地址**默认不绑**：APK 首次启动会让用户自己填。这个变量是**可选**的，只有在你想给自己发一个“预填好地址”的包时才需要设（例如你自建服务、想省掉家人每次手填）：
 
 ```bash
-gh variable set DAYBOOK_SERVER_URL --body 'https://你的域名'
+gh variable set DAYBOOK_SERVER_URL --body 'https://你的域名'     # 可选；不设也行
 ```
 
 **Secrets** —— 可选。配了就出正式签名包，没配自动退化成 debug 签名包。用你现有的 `.jks`：
@@ -117,6 +117,27 @@ gh secret set DOCKERHUB_TOKEN -R getl-x/daybook
 - 想 private：先在 Hub 上手动建一个 private 仓库（免费账号只能 1 个 private），那样 VPS 上要先 `docker login` 才能拉。
 - 两个字段**缺任一**，发布流程**不会挂**：只推 GHCR，并在 job summary 里标注一行说明。
 - 验证：`docker manifest inspect docker.io/getl/daybook:0.1.1`（public 包可匿名），或 `docker pull getl/daybook:0.1.1`。Docker Hub 对匿名拉取有频率限制（个人使用足够）；两个仓库内容完全一致。
+
+---
+
+## 一个 jks 供多个 App 复用
+
+同一个 keystore 文件 + 同一套 4 个 secret 名，可以给后续所有 App 复用，不用每次重新生成：
+
+- **secret 名不变**：`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` —— 新仓库照抄这 4 个名字即可（值也照旧）。
+- **`applicationId` 必须各异**：同一台手机上两个 App 的包名不能一样，否则装第二个会覆盖第一个。改 `source/web/capacitor.config.ts` 的 `appId`（以及 Android 工程里的 `applicationId`）。
+- **更规范的做法**：用**同一个 keystore 里的不同 alias** 给不同 App 签名，一个项目一个别名，互不干扰：
+
+  ```bash
+  keytool -genkeypair -alias 应用名 -keystore 同一个.jks
+  ```
+
+- **务必备份** `.jks` + alias + 口令（三个一起稳妥存好）：**丢了就再也发不出能覆盖升级的包** —— 用户只能卸载重装（侧载的后果是卸载重装、重新登录）。注意数据在**服务器**上，不会因为重装而丢，重新登录后照常看到。
+- 忘了 alias 叫什么、或不确定口令对不对，随时可以查：
+
+  ```bash
+  keytool -list -v -keystore 你的.jks        # 输出里的 "Alias name" / "别名" 就是 alias
+  ```
 
 ---
 

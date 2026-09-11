@@ -12,7 +12,7 @@
 | 1. 仓库骨架与地基 | ✅ npm workspaces、迁移、用户名+口令认证（scrypt + JWT + refresh 轮转）、Docker 镜像与 compose |
 | 2. 日记核心 | ✅ 今日页（含昨日回顾）、日历页、单日详情与补写、突发事情、字段级保存与冲突提示、离线草稿 |
 | 3. 通知（Web Push） | ✅ 设置页（提醒时间/开关/时区/日界）、每分钟排程 tick、订阅管理、iOS 安装引导页 |
-| 4. 测试与上线 | 进行中：189 个用例全绿、容器冒烟通过；Android 壳（Capacitor）已能出包；剩真实设备推送验证、导出（第二迭代） |
+| 4. 测试与上线 | 进行中：202 个用例全绿（含前端 13 个纯逻辑单测）、容器冒烟通过；Android 壳（Capacitor）已能出包、APK 首次启动可填服务器地址；剩真实设备推送验证、导出（第二迭代） |
 
 ## 目录约定
 
@@ -32,6 +32,7 @@ daybook/
     ├── shared/                 前后端共用纯逻辑（零依赖）：time.ts
     ├── server/                 后端：Node 24 直跑 TS + Fastify + PostgreSQL（src/、migrations/、test/）
     ├── web/                    前端：React + Vite + Tailwind（PWA）
+    │   ├── test/               前端纯逻辑单测（如 lib/server.ts 的地址规范化/校验）
     │   ├── capacitor.config.ts Capacitor（Android 壳）配置
     │   └── android/            Capacitor 生成的 Android 工程（构建产物不入库）
     └── scripts/                构建/资源脚本（make-icons.mjs）
@@ -104,7 +105,7 @@ DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.1 docker compose up -d --no-build
 
 > `--no-build` 不能省：`compose.yml` 里有 `build: .`；用已发布镜像时加它，避免在本机重新构建。版本号务必**手动指定**（别用 `latest`，它会被下次发布覆盖、不好回溯）。
 
-**装 Android APK**：到仓库的 Releases 页下载 `.apk`（可选核对 `.sha256`）→ 手机允许「未知来源安装」→ 安装后用账号口令登录。APK 里已内置前端资源（离线能打开壳），后端地址在构建时由仓库变量 `DAYBOOK_SERVER_URL` 注入，所以**必须配一个 HTTPS 后端**才能连上。
+**装 Android APK**：到仓库的 Releases 页下载 `.apk`（可选核对 `.sha256`）→ 手机允许「未知来源安装」→ 安装后填你的服务器地址（必须 `https://`，填一次会记住）再登录。APK 里已内置前端资源（离线能打开壳），**默认不绑任何域名**；自建者想给自己发的包预设地址，可选地在仓库变量里设 `DAYBOOK_SERVER_URL`。
 
 > APK 里 **Web Push 用不了**（Capacitor 的 WebView 不支持），暂时靠「打开应用」看内容；浏览器把 PWA 加到主屏则 Web Push 照常可用。原生本地通知列入第二迭代。
 

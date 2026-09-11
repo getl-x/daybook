@@ -449,7 +449,7 @@ Manifest（`display: standalone`）+ Service Worker（应用壳与最近日记�
 
 - **Capacitor 8.5.1** 包壳，复用同一套前端；工程在 `source/web/android/`（appId `com.getlx.daybook`，minSdk 24 / compileSdk 36 / targetSdk 36，`androidScheme: https` → 必须 HTTPS 后端）；
 - **APK 内置前端资源**：前端产物打包进 APK，离线也能打开应用壳；因此前端每次改动要重发一版 APK（个人使用可以接受）；
-- **后端地址构建时注入**：前端读 `VITE_DAYBOOK_SERVER_URL`（由仓库变量 `DAYBOOK_SERVER_URL` 注入）；WebView 的源是 `https://localhost`，所以必须用绝对地址；
+- **后端地址默认不写死**：原生壳首次启动让用户填服务器地址（存 localStorage，见 `source/web/src/lib/server.ts`）；可选地用 `VITE_DAYBOOK_SERVER_URL`（由仓库变量 `DAYBOOK_SERVER_URL` 注入）预设默认值。WebView 的源是 `https://localhost`，所以必须用绝对地址；
 - **服务端 CORS**：默认放行 `https://localhost` 与 `capacitor://localhost`，可用环境变量 `CORS_ORIGINS`（逗号分隔）覆盖；不开 credentials，令牌仍走 `Authorization` 头；
 - **CI 出包**：`.github/workflows/android-release.yml` 打 `v*` 标签 → 构建前端 + `cap sync` + gradle 打包 → 把 `daybook-<版本>-android-<release|debug>.apk` 与 `.sha256` 附到 GitHub Release；
 - **签名**：用你现有的 `.jks`（密钥文件放**仓库外**，仓库里只放 `source/web/android/keystore.properties.example`）；配了 secrets 出正式包，**没配就自动退化成 debug 签名包**（能装能测，但密钥是公开的调试密钥，不能当正式版升级）。命令见 `android-release.yml` 与运维手册。

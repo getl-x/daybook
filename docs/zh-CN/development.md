@@ -21,7 +21,7 @@
 ```bash
 cd source
 npm ci                                # 安装依赖
-npm test                              # shared + server 全部用例
+npm test                              # shared + server + web 全部用例
 npm run typecheck -w @daybook/server
 npm run typecheck -w @daybook/web
 npm run build -w @daybook/web         # 产出 web/dist
@@ -37,7 +37,8 @@ node server/src/db/migrate.ts && node server/src/index.ts
 
 - `source/shared/test/`：纯逻辑（日记日 / 时区 / DST / 提醒推进），零依赖；
 - `source/server/test/*.test.ts`：路由与领域逻辑；`helpers/pglite.ts` 用 **PGlite 跑真实 PostgreSQL SQL 与真实迁移**（不需要 Docker）；
-- 前端（`web/`）没有单测：靠 `typecheck` + `build` + 浏览器（含无头）手工验证。
+- `source/web/test/*.test.ts`：前端纯逻辑单测（如 `src/lib/server.ts` 的服务器地址规范化 / 校验 / 优先级）；
+- 前端的其余部分（组件 / 交互）没有单测：靠 `typecheck` + `build` + 浏览器（含无头）手工验证。
 
 ## 5. 代码约定
 

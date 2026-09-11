@@ -370,7 +370,7 @@ DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.1 docker compose up -d --no-build
 1. 打开仓库的 **Releases** 页，下载最新的 `daybook-<版本>-android-<release|debug>.apk`（可用旁边的 `.sha256` 核对）。
 2. 手机设置里允许这个来源安装应用（「未知来源」/「安装未知应用」）。
 3. 打开 APK 安装 → 启动 → 用账号口令登录。
-4. **必须有一个 HTTPS 后端**：APK 里的壳把后端地址写死了（打包时由仓库变量 `DAYBOOK_SERVER_URL` 注入），且只认 HTTPS（`androidScheme: https`）。所以要先按前面几步把站点跑起来、拿到 `https://diary.example.com`，把它配到仓库变量再出包（见 operations.md 的「配一次」）。
+4. **服务器地址不写死了**：APK **默认不绑任何域名**，首次启动会要求填服务器地址（必须 `https://`；WebView 的源是 `https://localhost`，所以只认绝对地址，见 `androidScheme: https`）。自建者如果想给自己发的包预设默认地址，可选地在仓库变量里设 `DAYBOOK_SERVER_URL`（见 operations.md 的「配一次」）；不设也行 —— 用户首次启动自己填，填一次会记住。
 
 > 提醒现状：APK 里 **Web Push 用不了**（Capacitor 的 WebView 不支持），暂时靠「打开应用」看内容；浏览器里把 PWA 加到主屏则 Web Push 照常可用。
 
