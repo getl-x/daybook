@@ -199,17 +199,23 @@ curl -s  https://diary.example.com/v1/meta/timezones | head -c 60   # {"error":"
 
 ---
 
-## 7. 从 GHCR 拉已发布的镜像（可选）
+## 7. 从已发布的镜像部署（GHCR / Docker Hub，可选）
 
-不想在本机构建、直接用 CI 已经发布好的镜像：
+不想在本机构建、直接用 CI 已经发布好的镜像。CI 会把镜像**同时推到两个仓库**（同一次构建、同名标签），拉哪个都行：
 
 ```bash
 cd /opt/daybook
+
+# 任选其一
 DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.0 docker compose up -d
+# 或从 Docker Hub 拉（内容与 GHCR 完全一致）
+docker pull getl/daybook:0.1.0
+DAYBOOK_IMAGE=getl/daybook:0.1.0 docker compose up -d
 ```
 
 - 版本号请**手动指定**（`0.1.0` 这种），**不要用 `latest`**：`latest` 会被下一次发布覆盖，出问题不好回溯；要升级就显式换一个版本号再 `up -d`。
-- public 仓库的包可以直接拉；私有仓库先 `echo <你的 PAT> | docker login ghcr.io -u <用户名> --password-stdin`。
+- **Docker Hub**（`getl/daybook`）：默认 **public**，可匿名 `docker pull getl/daybook:0.1.0`（有频率限制，个人使用足够）；若设为 **private**，先在 VPS 上 `docker login`（`docker login -u getl`，口令填 access token）再拉。
+- **GHCR**（`ghcr.io/getl-x/daybook`）：public 包可直接拉；private 先 `echo <你的 PAT> | docker login ghcr.io -u <用户名> --password-stdin`。
 - 镜像之外的东西（`.env`、反代、数据卷）和第 2、5 节一致，别漏。
 
 ---

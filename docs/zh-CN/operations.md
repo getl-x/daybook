@@ -91,6 +91,27 @@ rm keystore.b64                            # 别把 base64 文件留在本地
 - 四个 secret 缺任意一个，`android-release.yml` 就退化成 **debug 签名包**：能装能测，但密钥是公开的调试密钥，**不能当正式版升级**（换正式包要卸载重装）。
 - 仓库里只有 `source/web/android/keystore.properties.example`；真实的 `.jks` 与 `keystore.properties` 都不进仓库（`.gitignore` 已排除）。
 
+**变量 + secret（推 Docker Hub 用）** —— 让 `docker-publish.yml` 把镜像**同时**推到 [Docker Hub](https://hub.docker.com/) 的 `docker.io/getl/daybook`（与 `ghcr.io/getl-x/daybook` 同一次构建、同名标签：`0.1.0` / `0.1` / `latest` / `sha-xxxxx`）。两处字段都在同一个 **Settings → Secrets and variables → Actions** 页面里，和上面 Android 签名那些并列：
+
+| 类型 | 名称 | 值 |
+| --- | --- | --- |
+| **变量**（Variables） | `DOCKERHUB_USERNAME` | `getl`（你的 Docker Hub 用户名；已设好） |
+| **secret**（Secrets） | `DOCKERHUB_TOKEN` | Docker Hub 的 Personal access token（**你自己生成**，见下） |
+
+生成 token：打开 https://hub.docker.com/settings/security → **New Access Token** → Description 随意（例：`daybook-ci-github-actions`）→ Access permissions 选 **Read & Write** → 生成后**只显示一次**，立即复制。（也可以复用 lastdone 那个 token，如果当时存下来了。）
+
+命令行等价写法（回车后粘贴 token）：
+
+```bash
+gh variable set DOCKERHUB_USERNAME --body getl -R getl-x/daybook
+gh secret set DOCKERHUB_TOKEN -R getl-x/daybook
+```
+
+- `docker.io/getl/daybook` 这个仓库**不用手动建**：首次 push 会自动创建（**默认 public**，和 `getl/lastdone` 一样）。
+- 想 private：先在 Hub 上手动建一个 private 仓库（免费账号只能 1 个 private），那样 VPS 上要先 `docker login` 才能拉。
+- 两个字段**缺任一**，发布流程**不会挂**：只推 GHCR，并在 job summary 里标注一行说明。
+- 验证：`docker manifest inspect docker.io/getl/daybook:0.1.0`（public 包可匿名），或 `docker pull getl/daybook:0.1.0`。Docker Hub 对匿名拉取有频率限制（个人使用足够）；两个仓库内容完全一致。
+
 ---
 
 ## 13. 排障清单
