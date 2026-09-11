@@ -1,151 +1,153 @@
 # daybook
 
-私密、轻量、带固定问题引导的日记应用：**早上回顾昨天并安排今天 → 白天随手记录 → 晚上总结**。
+A private, self-hosted guided journal: **review yesterday and plan today in the morning → jot things down during the day → summarize in the evening.**
 
-自托管个人版：跑在自己的 VPS 上（Docker），注册关闭（账号用 CLI 创建），提醒走服务端 Web Push（当天送达，不承诺准点）。
+[中文说明 →](README.zh-CN.md)
 
-## 当前进度
+## Features
 
-| 阶段 | 状态 |
-| --- | --- |
-| 0. 技术验证 | ✅ `source/shared/src/time.ts`：日记日 04:00 起算 / IANA 时区 / DST 安全 / 提醒时刻（19 个用例） |
-| 1. 仓库骨架与地基 | ✅ npm workspaces、迁移、用户名+口令认证（scrypt + JWT + refresh 轮转）、Docker 镜像与 compose |
-| 2. 日记核心 | ✅ 今日页（含昨日回顾）、日历页、单日详情与补写、突发事情、字段级保存与冲突提示、离线草稿 |
-| 3. 通知（Web Push） | ✅ 设置页（提醒时间/开关/时区/日界）、每分钟排程 tick、订阅管理、iOS 安装引导页 |
-| 4. 测试与上线 | 进行中：202 个用例全绿（含前端 13 个纯逻辑单测）、容器冒烟通过；Android 壳（Capacitor）已能出包、APK 首次启动可填服务器地址；剩真实设备推送验证、导出（第二迭代） |
+- **Guided, fixed fields**: `day_plan` / `day_events` / `day_meals` / `evening_summary`, plus a "yesterday review" entry point.
+- **Calendar backfill and per-day detail** views.
+- **Incidents** are filed under a day automatically from their timestamp (timezone- and day-boundary-aware).
+- **Field-level autosave** with an explicit conflict notice when a write overwrites something newer.
+- **Offline drafts** kept in IndexedDB and replayed once you're back online.
+- **Daily Web Push reminders** (VAPID) with per-user timezone and day boundary (the journal day starts at 04:00 local).
+- **Installable PWA** — add to home screen; Web Push works on iOS 16.4+ too.
+- **Optional Android APK** (a Capacitor shell); you enter your server address on first launch.
+- **Registration is disabled**; accounts are created with a CLI.
+- **Account deletion** has a 7-day grace period, or an immediate purge from the CLI.
+- **No third-party scripts, no telemetry.**
 
-## 目录约定
+## Quick start (Docker)
 
-**所有代码都在 `source/`**（npm workspaces）；根目录只留入口文档、Docker 编排与部署输入物。
-（与同目录下的 `lastdone` 项目同一套摆法：默认拒绝的 `.gitignore` 白名单 + `source/` 收纳源码。）
+```bash
+git clone https://github.com/getl-x/daybook.git
+cd daybook
+
+cp deploy/daybook.env.example .env
+# Edit .env: set POSTGRES_PASSWORD and JWT_SECRET (>= 32 chars). VAPID_* is optional.
+
+docker pull ghcr.io/getl-x/daybook:0.1.2
+
+DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.2 docker compose up -d --no-build
+
+docker compose ps
+curl -s http://127.0.0.1:8090/healthz   # {"status":"ok","db":"ok","time":"..."}
+```
+
+Create your first account (registration is off):
+
+```bash
+docker compose exec -T app sh -c "echo 'your-password' | node server/src/cli/user.ts create --username you --timezone Asia/Shanghai"
+```
+
+At this point the app only listens on `127.0.0.1:8090`. To reach it from the internet, put a reverse proxy with TLS in front of it — see [Self-hosting](#self-hosting).
+
+> `--no-build` is not optional: `compose.yml` contains `build: .`, so without it Compose would try to rebuild locally instead of using the pulled image. Always pin an explicit version rather than `latest`, which gets overwritten by the next release.
+
+## Self-hosting
+
+Full, copy-pasteable steps live in [`docs/zh-CN/deployment.md`](docs/zh-CN/deployment.md) (currently in Chinese). The essentials:
+
+- The app container **always listens on 8090**, mapped only to `127.0.0.1` on the host. You bring your own reverse proxy and TLS (nginx, caddy, …).
+- The image contains **only the app** — no proxy, no TLS termination.
+- The database is reachable **only on the Compose network**; no host port is published.
+- **HTTPS is mandatory**: the Android app forbids cleartext traffic, and Web Push / Service Workers only work in a secure context.
+- Reminders are best-effort — delivered the same day, not at an exact minute.
+
+## Android app
+
+1. Download the APK from the [Releases](../../releases) page (optionally verify the matching `.sha256`).
+2. Allow installing apps from unknown sources in your phone settings.
+3. On first launch, enter your server address (it must be `https://`); it is remembered after the first time.
+
+- The APK bundles the front-end assets and **binds to no domain by default**. If you build your own APK, you can preset a default via the repository variable `DAYBOOK_SERVER_URL`.
+- **Web Push does not work inside the APK** (a WebView limitation). In a browser PWA it works normally.
+
+## Development
+
+```bash
+cd source
+npm ci
+
+npm test                        # 202 test cases
+npm run typecheck -w @daybook/server
+npm run typecheck -w @daybook/web
+npm run build -w @daybook/web   # outputs web/dist
+
+# Run the backend locally (needs DATABASE_URL and JWT_SECRET in the environment)
+node server/src/db/migrate.ts && node server/src/index.ts
+```
+
+Requires **Node ≥ 24** — the backend runs TypeScript directly via built-in type stripping. On older Node you'll hit `ERR_NO_TYPESCRIPT`.
+
+## Tech stack
+
+- **Frontend**: React + TypeScript + Vite + Tailwind, PWA (manifest + service worker, hash routing).
+- **Backend**: Node 24 running TypeScript directly (type stripping) + Fastify + `pg` (hand-written SQL).
+- **Database**: PostgreSQL 16.
+- **Deployment**: your own VPS + Docker (app + Postgres containers); reverse proxy of your choice.
+- **Reminders**: a Postgres job table + a per-minute tick + Web Push (VAPID), idempotency key `(user, journal day, type)`.
+- **Time rules**: the journal day starts at 04:00 local; the server is the single source of truth, shared with the frontend via `source/shared/src/time.ts`.
+
+## Project layout
+
+The repository root holds only the entry documents, the Docker build/orchestration files, and the deployment inputs; all code lives under `source/` (npm workspaces).
 
 ```text
 daybook/
-├── DAYBOOK-DESIGN.zh-CN.md     产品与技术设计（当前有效；v1.1 归档在 docs/zh-CN/archive/）
-├── README.md                   本文件
-├── Dockerfile / compose.yml    容器构建与编排（放根目录）
-├── .dockerignore / .gitignore  两份都是「默认拒绝 + 白名单」
-├── deploy/                     部署输入物：daybook.env.example、backup.sh（备份脚本）
-├── docs/zh-CN/                 面向人的文档：development / deployment / operations
-└── source/                     全部应用源码
+├── DAYBOOK-DESIGN.zh-CN.md     Product & technical design (current; v1.1 archived under docs/zh-CN/archive/)
+├── README.md                   This file (English)
+├── README.zh-CN.md             中文说明
+├── LICENSE                     MIT
+├── Dockerfile / compose.yml    Container build & orchestration (at the root)
+├── .dockerignore / .gitignore  Both follow "deny by default + whitelist"
+├── deploy/                     Deployment inputs: daybook.env.example, backup.sh
+├── docs/zh-CN/                 Human-facing docs: development / deployment / operations
+└── source/                     All application source
     ├── package.json            workspaces: shared / server / web
-    ├── shared/                 前后端共用纯逻辑（零依赖）：time.ts
-    ├── server/                 后端：Node 24 直跑 TS + Fastify + PostgreSQL（src/、migrations/、test/）
-    ├── web/                    前端：React + Vite + Tailwind（PWA）
-    │   ├── test/               前端纯逻辑单测（如 lib/server.ts 的地址规范化/校验）
-    │   ├── capacitor.config.ts Capacitor（Android 壳）配置
-    │   └── android/            Capacitor 生成的 Android 工程（构建产物不入库）
-    └── scripts/                构建/资源脚本（make-icons.mjs）
+    ├── shared/                 Shared pure logic (zero deps): time.ts
+    ├── server/                 Backend: Node 24 TS + Fastify + PostgreSQL (src/, migrations/, test/)
+    ├── web/                    Frontend: React + Vite + Tailwind (PWA)
+    │   ├── test/               Frontend pure-logic unit tests (e.g. server URL normalization/validation)
+    │   ├── capacitor.config.ts Capacitor (Android shell) config
+    │   └── android/            Generated Android project (build output not committed)
+    └── scripts/                Build/asset scripts (make-icons.mjs)
 ```
 
-`.env` 放在**仓库根目录**（compose 读它），模板是 `deploy/daybook.env.example`；`.env` 永不入库、不进镜像。
+The `.env` file lives at the **repository root** (Compose reads it); its template is `deploy/daybook.env.example`. `.env` is never committed and never baked into the image.
 
-## 文档
+## Fork / self-build notes
 
-| 文档 | 说明 |
-| --- | --- |
-| [`DAYBOOK-DESIGN.zh-CN.md`](DAYBOOK-DESIGN.zh-CN.md) | **产品与技术设计（自托管 + Docker，当前有效）**；末尾有实现与计划的差异记录、代码审查修复记录 |
-| [`docs/zh-CN/deployment.md`](docs/zh-CN/deployment.md) | 部署：前置条件、env、构建启动、nginx/caddy 反代与 HTTPS、首次使用（iPhone 主屏） |
-| [`docs/zh-CN/operations.md`](docs/zh-CN/operations.md) | 运维：备份与恢复、升级与回滚、排障清单、安全自查、卸载迁移 |
-| [`docs/zh-CN/development.md`](docs/zh-CN/development.md) | 开发：工具链、常用命令、目录约定、环境坑 |
-| [`docs/zh-CN/archive/diary-app-development-plan-v1.1.md`](docs/zh-CN/archive/diary-app-development-plan-v1.1.md) | 归档：v1.1 三端方案与完整技术评审（历史） |
+This is a self-hosted project, so most people deploy their **own** build. A few things to change if you fork:
 
-更早的 v1.0 仍在 `F:\Ai Code\diary-app-development-plan.md`（原始文件，未动）。
+1. **Images**: `ghcr.io/getl-x/daybook` on GitHub Packages is the **upstream** image. After forking, build and push your own image and point `DAYBOOK_IMAGE` at it (any image reference works).
+2. **Android `applicationId`** is `com.getlx.daybook`. For your own release, change it to your own id — note that this makes it a **new app identity**, so existing users must uninstall and reinstall.
+3. **Sign your release builds with your own keystore** (see "一个 jks 供多个 App 复用" in [`docs/zh-CN/operations.md`](docs/zh-CN/operations.md)).
+4. **Replace the example domain** `diary.example.com` in the docs with your own.
+5. **Upstream publishing to GHCR / Docker Hub** uses the variable `DOCKERHUB_USERNAME` + the secret `DOCKERHUB_TOKEN`. A fork won't push by default: if either is missing the workflow simply **skips** the Docker Hub step and reports it — it does not fail.
 
-## 常用命令
+## Security & privacy
 
-```bash
-# 依赖（每个 workspace 共用一份，装在 source/ 下）
-cd source && npm ci
+A journal is highly private data, so the code and deployment carry these constraints (each backed by tests or a container check):
 
-# 测试（Node ≥ 24 内置 runner + TS 类型擦除，无需构建）
-npm test                       # 在 source/ 里跑
-npm run typecheck -w @daybook/server
-npm run typecheck -w @daybook/web
-npm run build -w @daybook/web
+- Logs never print journal text, tokens, or push-subscription endpoints; 5xx responses return only `internal_error`, never raw database text.
+- `.env` and backup files are mode 600 and excluded by both `.gitignore` and `.dockerignore`.
+- PostgreSQL never listens on the public internet; the app container runs as non-root.
+- Auth: scrypt password hashing, a constant-time KDF even for unknown usernames, login rate limiting (per username and per real IP), refresh-token rotation with CAS to prevent replay, and a per-request check that the account is active and the session is not revoked (logout/disable takes effect immediately).
+- Backups use [`deploy/backup.sh`](deploy/backup.sh) (cron + optional rsync to off-site storage); restore steps are in the script header.
 
-# 本地起后端（需要根目录 .env 里的 DATABASE_URL 与 JWT_SECRET）
-node server/src/db/migrate.ts && node server/src/index.ts    # 在 source/ 里跑
-```
+## Status & roadmap
 
-WSL 注意：系统自带的 Node 22 是**不含 TS 支持**的构建（会报 `ERR_NO_TYPESCRIPT`）。要么把 WSL 的 Node 升到 24，要么用 Windows 的 Node 24：`"/mnt/c/Program Files/nodejs/node.exe" --test ...`。
+**Shipped: v0.1.2** (Docker image + Android APK).
 
-## 部署（Docker）
+Next up:
 
-```bash
-cp deploy/daybook.env.example .env         # 填 POSTGRES_PASSWORD / JWT_SECRET / VAPID_*
-DAYBOOK_IMAGE=daybook:dev docker compose up -d   # 或 docker build -t daybook:dev .
-```
+- Export (Markdown / JSON).
+- Review statistics.
+- A conflict-merge UI.
+- Native local notifications.
 
-完整步骤见 [`docs/zh-CN/deployment.md`](docs/zh-CN/deployment.md)。要点：
+## License
 
-- 应用容器**固定监听 8090**，只映射到宿主 `127.0.0.1:8090`；TLS 与反代（nginx/caddy）由你自己部署。
-- 镜像里**不含** caddy/TLS/反代；容器以非 root（`node`）运行；数据库只在 compose 内网，不映射端口。
-- 生成 VAPID 密钥：`npx web-push generate-vapid-keys`，写进 `.env`（不配也能启动，只是提醒发不出去，日志会提示）。
-
-## 发布（GitHub Actions）
-
-三个 workflow 都在 `.github/workflows/`，push / 打标签自动跑（也能在 Actions 页面手动触发）：
-
-| workflow | 触发 | 产物 |
-| --- | --- | --- |
-| `ci.yml` | push / PR 到 `main` | typecheck（server + web）+ 全部用例 + 前端构建（只验证，不出产物） |
-| `docker-publish.yml` | 推 `v*` 标签（或手动） | 先用 compose + 真 Postgres 跑冒烟（healthz 200 / 缺失资源 404 / 受保护接口 401 / 非 root），通过后把镜像**同时推到两个仓库**：`ghcr.io/getl-x/daybook` 与 `docker.io/getl/daybook`（同一次构建、同名标签：`0.1.1` / `0.1` / `latest` / `sha-xxxxx`） |
-| `android-release.yml` | 推 `v*` 标签（或手动） | 构建前端 → `cap sync` → gradle 打包 → 把 `daybook-<版本>-android-<release\|debug>.apk` 与 `.sha256` 附到 GitHub Release，同时上传 artifact |
-
-> 推 Docker Hub 需要**一个变量 + 一个 secret**：变量 `DOCKERHUB_USERNAME`（= `getl`）+ secret `DOCKERHUB_TOKEN`（Docker Hub 的 Personal access token）。两个都配全才会推 Docker Hub；缺任一就只推 GHCR，并在 job summary 里标注，**不会让流程失败**。配法见 [`docs/zh-CN/operations.md`](docs/zh-CN/operations.md) 的「配一次：GitHub 上的 secrets 与变量」。
-
-**拉已发布的镜像**（public 仓库的包可直接拉，无需登录）：
-
-```bash
-docker pull ghcr.io/getl-x/daybook:0.1.1
-docker pull getl/daybook:0.1.1                       # 或从 Docker Hub 拉（内容一致）
-DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.1 docker compose up -d --no-build
-```
-
-> `--no-build` 不能省：`compose.yml` 里有 `build: .`；用已发布镜像时加它，避免在本机重新构建。版本号务必**手动指定**（别用 `latest`，它会被下次发布覆盖、不好回溯）。
-
-**装 Android APK**：到仓库的 Releases 页下载 `.apk`（可选核对 `.sha256`）→ 手机允许「未知来源安装」→ 安装后填你的服务器地址（必须 `https://`，填一次会记住）再登录。APK 里已内置前端资源（离线能打开壳），**默认不绑任何域名**；自建者想给自己发的包预设地址，可选地在仓库变量里设 `DAYBOOK_SERVER_URL`。
-
-> APK 里 **Web Push 用不了**（Capacitor 的 WebView 不支持），暂时靠「打开应用」看内容；浏览器把 PWA 加到主屏则 Web Push 照常可用。原生本地通知列入第二迭代。
-
-## 账号管理（CLI）
-
-```bash
-docker compose exec -T app sh -c "echo '口令' | node server/src/cli/user.ts create --username getl --timezone Asia/Shanghai"
-docker compose exec -T app sh -c "echo '新口令' | node server/src/cli/user.ts reset-password --username getl"
-docker compose exec -T app node server/src/cli/user.ts disable --username getl     # / enable
-docker compose exec -T app node server/src/cli/user.ts list
-
-# 删除账号：网页里「设置 → 删除账号」会进入 7 天宽限期，到期自动彻底清除；
-# 管理员也可以立即清除：
-docker compose exec -T app node server/src/cli/user.ts purge --username getl
-docker compose exec -T app node server/src/cli/user.ts purge-expired --grace_days 7
-```
-
-> 容器里的路径是 `/app/server/...`（镜像把 `source/` 铺平了），所以命令写成 `node server/src/cli/user.ts`。
-
-## 技术选型（详见设计文档 §6、§7）
-
-- **前端**：React + TypeScript + Vite + Tailwind，PWA（Manifest + Service Worker，hash 路由）
-- **后端**：Node 24 直接运行 TypeScript（类型擦除）+ Fastify + `pg`（手写 SQL）
-- **部署**：自有 VPS + Docker（应用 + PostgreSQL 16 两个容器），反代自备
-- **提醒**：Postgres 任务表 + 每分钟 tick + Web Push（VAPID）；幂等键 `(用户, 日记日, 类型)`
-- **时间规则**：日记日从本地 04:00 起算；服务端为唯一权威，前后端共用 `source/shared/src/time.ts`
-
-## 核心数据约定（详见设计文档 §4、§5）
-
-- **当天字段模型**：一条记录描述「这一天自己」；「昨日回顾」是填写入口，不是存储位置。
-- **字段级写入**：只提交变更字段 + `base_updated_at`；冲突仍写入但返回 `overwritten`，界面提示。
-- **突发事情**：归属日由 `occurred_at` + 时区 + 日界推导，改时间会跨日移动。
-
-## 隐私与安全
-
-日记属于高度私密数据，代码与部署上有这些约束（都有测试或容器验证兜底）：
-
-- 日志不打印日记正文、令牌、推送订阅 endpoint；5xx 只回 `internal_error`，不回数据库原文。
-- `.env` 与备份文件权限 600，且被 `.gitignore` 与 `.dockerignore` 双重排除。
-- PostgreSQL 不监听公网；应用容器非 root 运行。
-- 认证：scrypt 存口令、用户名不存在也走一次 KDF（时序一致）、登录限流（按用户名 + 按真实 IP）、
-  refresh 轮转用 CAS 防重放、每次请求校验「账号有效 + 会话未吊销」（登出/停用立即生效）。
-- 备份用 [`deploy/backup.sh`](deploy/backup.sh)（cron + 可选 rsync 到异地），恢复步骤写在脚本头部。
+[MIT](LICENSE).

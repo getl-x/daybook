@@ -1,4 +1,4 @@
-# 默认全部忽略，只放行下面显式批准的内容（与 lastdone 仓库同一套策略）。
+# 默认全部忽略，只放行下面显式批准的内容。
 #
 # 好处：将来在根目录随手建的脚本/草稿/数据不会被误提交；坏处：新增顶层目录时要记得加放行。
 # 与 .dockerignore 保持同样的白名单思路。
@@ -30,7 +30,9 @@
 
 # —— 根目录的入口文档与编排 ——
 !/README.md
+!/README.zh-CN.md
 !/DAYBOOK-DESIGN.zh-CN.md
+!/LICENSE
 !/Dockerfile
 !/Dockerfile.*
 !/.dockerignore
@@ -62,6 +64,8 @@
 # —— GitHub Actions（放行 CI 与两个发布流程）——
 !/.github/
 /.github/*
+!/.github/ISSUE_TEMPLATE/
+!/.github/ISSUE_TEMPLATE/**
 !/.github/workflows/
 /.github/workflows/*
 !/.github/workflows/ci.yml

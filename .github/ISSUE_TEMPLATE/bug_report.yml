@@ -1,0 +1,58 @@
+name: 🐞 Bug report / 缺陷报告
+description: Something isn't working. 报告一个问题（可以用中文写）。
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请尽量提供足够的信息，方便复现。
+        Thanks for the report — the more detail, the easier it is to reproduce.
+        **可以用中文写。**
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境 / Environment
+      description: 部署方式（Docker 自建 / 官方镜像版本 / 浏览器或 APK 版本）。
+      placeholder: |
+        - 部署方式：Docker 自建 / 官方镜像 ghcr.io/getl-x/daybook:0.1.2
+        - 前端：浏览器 Chrome 130 / Safari iOS 17 / Android APK 0.1.2
+        - 服务端版本：
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望与实际 / Expected vs. actual
+      description: 你期望发生什么？实际发生了什么？
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Logs
+      description: |
+        粘贴 `docker compose logs app` 的相关片段（需要时加 `--tail 100`）。
+        ⚠️ **请先去掉口令与令牌**：password、JWT / refresh token、VAPID 私钥、推送订阅 endpoint。
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 自查清单 / Checklist
+      options:
+        - label: 已看过 docs/zh-CN/deployment.md
+          required: true
+        - label: 已跑过 `docker compose ps` 与 `docker compose logs app`
+          required: true

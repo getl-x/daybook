@@ -488,7 +488,7 @@ node --test "source/shared/test/*.test.ts" "source/server/test/*.test.ts"
 
 # WSL：WSL 自带的 Node 22 是不含 TS 支持的构建（ERR_NO_TYPESCRIPT），两条路都验证过：
 #   a) 直接调 Windows 的 Node 24（已实测 39 用例全绿）
-cd "/mnt/f/Ai Code/personal-projects/daybook" && "/mnt/c/Program Files/nodejs/node.exe" --test "source/shared/test/*.test.ts" "source/server/test/*.test.ts"
+cd <仓库根目录> && "/mnt/c/Program Files/nodejs/node.exe" --test "source/shared/test/*.test.ts" "source/server/test/*.test.ts"
 #   b) 或把 WSL 的 Node 升到 24（nvm install 24 / NodeSource）后直接 node --test
 ```
 

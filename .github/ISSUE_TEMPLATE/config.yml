@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 部署与运维文档 / Deployment & operations docs
+    url: https://github.com/getl-x/daybook/tree/main/docs/zh-CN
+    about: 部署、升级、备份与排障请先看这里再提 issue。

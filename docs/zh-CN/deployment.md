@@ -63,7 +63,7 @@ NODE_ENV=production
 
 ```bash
 # A. 借已拉的镜像里的依赖生成（无需本机装 node；需先做第 3 步的 docker pull）
-docker run --rm --entrypoint npx ghcr.io/getl-x/daybook:0.1.1 web-push generate-vapid-keys
+docker run --rm --entrypoint npx ghcr.io/getl-x/daybook:0.1.2 web-push generate-vapid-keys
 
 # B. 本机有 node 时
 npx web-push generate-vapid-keys
@@ -89,13 +89,13 @@ VAPID_SUBJECT=mailto:you@example.com    # ← 改成你的邮箱
 cd /opt/daybook
 
 # 固定一个版本号，别用 latest（latest 会被下次发布覆盖，出问题不好回溯）
-docker pull ghcr.io/getl-x/daybook:0.1.1
+docker pull ghcr.io/getl-x/daybook:0.1.2
 
 # --no-build 很关键：compose.yml 里有 build: .，不加这个参数会尝试在本机重新构建
-DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.1 docker compose up -d --no-build
+DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.2 docker compose up -d --no-build
 ```
 
-> 从 Docker Hub 拉也一样（内容完全一致）：`docker pull getl/daybook:0.1.1`，然后把 `DAYBOOK_IMAGE` 换成 `getl/daybook:0.1.1`。
+> 从 Docker Hub 拉也一样（内容完全一致）：`docker pull getl/daybook:0.1.2`，然后把 `DAYBOOK_IMAGE` 换成 `getl/daybook:0.1.2`。
 
 确认起来了：
 
