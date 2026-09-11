@@ -33,6 +33,7 @@
 !/README.zh-CN.md
 !/DAYBOOK-DESIGN.zh-CN.md
 !/LICENSE
+!/SECURITY.md
 !/Dockerfile
 !/Dockerfile.*
 !/.dockerignore
