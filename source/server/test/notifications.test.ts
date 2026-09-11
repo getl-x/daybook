@@ -34,6 +34,7 @@ const BASE_SETTINGS: ReminderSettings = {
   eveningReminderEnabled: true,
   eveningReminderTime: '21:00',
   notifyOnlyIfIncomplete: true,
+  quietHours: { enabled: false, start: '', end: '' },
 };
 
 interface SenderHarness {
@@ -305,5 +306,52 @@ describe('调度器（内存 store + 假 sender）', () => {
     // now 是上海 09:00，当天的 07:30 已经过了 → 下一次是第二天 07:30（上海）= 09-10T23:30Z
     assert.equal(store.schedules.get(`${user.id}:morning`)?.toISOString(), '2026-09-10T23:30:00.000Z');
     assert.equal(store.schedules.get(`${user.id}:evening`), null);
+  });
+});
+
+describe('调度器接入静默时段', () => {
+  it('窗口内的提醒推迟到窗口结束：不发送、不建送达记录、排程改到窗口结束', async () => {
+    const store = createFakeStore();
+    const user = store.addUser({ username: 'getl', passwordHash: 'x' });
+    await store.updateReminderSettings(user.id, { quietEnabled: true, quietStart: '12:00', quietEnd: '13:30' });
+    const fireAt = new Date('2026-09-10T05:00:00Z'); // 上海 13:00，落在窗口内
+    store.seedSchedule(user.id, 'morning', fireAt);
+    addSubscription(store, user.id, 'https://push.example/1');
+
+    const { sender, sent } = createFakeSender(() => ({ status: 'sent' }));
+    const { deps } = makeDeps(store, sender, fireAt);
+    const report = await runDueReminders(deps, fireAt);
+
+    assert.equal(report.due, 1);
+    assert.equal(report.deferred, 1);
+    assert.equal(report.sent, 0);
+    assert.equal(sent.length, 0);
+    // 推迟到上海 13:30 = 05:30Z
+    assert.equal(store.schedules.get(`${user.id}:morning`)?.toISOString(), '2026-09-10T05:30:00.000Z');
+    assert.equal(store.deliveries.size, 0, '推迟阶段不该建送达记录');
+  });
+
+  it('推迟太晚（超过 12 小时）→ 记 skipped 并推进排程，不发送', async () => {
+    const store = createFakeStore();
+    const user = store.addUser({ username: 'getl', passwordHash: 'x' });
+    await store.updateReminderSettings(user.id, {
+      quietEnabled: true,
+      quietStart: '08:00',
+      quietEnd: '23:00',
+      notifyOnlyIfIncomplete: false,
+    });
+    const fireAt = new Date('2026-09-10T01:00:00Z'); // 上海 09:00：窗口内，但窗口结束晚于 12 小时
+    store.seedSchedule(user.id, 'morning', fireAt);
+    addSubscription(store, user.id, 'https://push.example/1');
+
+    const { sender, sent } = createFakeSender(() => ({ status: 'sent' }));
+    const { deps } = makeDeps(store, sender, fireAt);
+    const report = await runDueReminders(deps, fireAt);
+
+    assert.equal(report.skipped, 1);
+    assert.equal(report.deferred, 0);
+    assert.equal(sent.length, 0);
+    assert.equal(store.deliveries.get(`${user.id}:2026-09-10:morning`)?.status, 'skipped');
+    assert.equal(store.schedules.get(`${user.id}:morning`)?.toISOString(), NEXT_DAY_FIRE_AT);
   });
 });

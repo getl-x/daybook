@@ -11,6 +11,7 @@ import { addDays, nextFireAt, type ISODate } from '@daybook/shared';
 import type { ServerSettings } from './diary.ts';
 import { DiaryError } from './diary.ts';
 import { diaryDate } from '@daybook/shared';
+import type { QuietHours } from './quiet-hours.ts';
 
 export type ReminderKind = 'morning' | 'evening';
 export const REMINDER_KINDS: readonly ReminderKind[] = ['morning', 'evening'];
@@ -21,6 +22,8 @@ export interface ReminderSettings extends ServerSettings {
   eveningReminderEnabled: boolean;
   eveningReminderTime: string;
   notifyOnlyIfIncomplete: boolean;
+  /** 静默时段：落在窗口内的提醒推迟到窗口结束（见 src/quiet-hours.ts） */
+  quietHours: QuietHours;
 }
 
 export interface PushSubscriptionRecord {
@@ -147,6 +150,9 @@ export interface NotificationStore {
       eveningReminderTime: string;
       notifyOnlyIfIncomplete: boolean;
       theme: string;
+      quietEnabled: boolean;
+      quietStart: string;
+      quietEnd: string;
     }>,
   ): Promise<ReminderSettings>;
 

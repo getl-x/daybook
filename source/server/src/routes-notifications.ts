@@ -27,6 +27,9 @@ interface SettingsBody {
   reminder_evening_enabled?: unknown;
   reminder_evening_time?: unknown;
   reminder_only_if_incomplete?: unknown;
+  quiet_enabled?: unknown;
+  quiet_start?: unknown;
+  quiet_end?: unknown;
 }
 
 interface SubscriptionBody {
@@ -47,6 +50,11 @@ function toSettingsView(settings: ReminderSettings, config: Config, subscription
       evening_enabled: settings.eveningReminderEnabled,
       evening_time: settings.eveningReminderTime,
       only_if_incomplete: settings.notifyOnlyIfIncomplete,
+    },
+    quiet_hours: {
+      enabled: settings.quietHours.enabled,
+      start: settings.quietHours.start,
+      end: settings.quietHours.end,
     },
     push: {
       /** 没配 VAPID 时前端就不显示"开启提醒"按钮 */
@@ -122,6 +130,18 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
       if (body.reminder_only_if_incomplete !== undefined) {
         patch.notifyOnlyIfIncomplete = Boolean(body.reminder_only_if_incomplete);
       }
+      if (body.quiet_enabled !== undefined) {
+        patch.quietEnabled = Boolean(body.quiet_enabled);
+        touchesSchedule = true;
+      }
+      if (body.quiet_start !== undefined) {
+        patch.quietStart = normalizeLocalTime(body.quiet_start, 'quiet_start');
+        touchesSchedule = true;
+      }
+      if (body.quiet_end !== undefined) {
+        patch.quietEnd = normalizeLocalTime(body.quiet_end, 'quiet_end');
+        touchesSchedule = true;
+      }
     } catch (error) {
       if (error instanceof DiaryError) {
         reply.code(400);
@@ -133,6 +153,29 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
     if (Object.keys(patch).length === 0) {
       reply.code(400);
       return { error: 'no_changes' };
+    }
+
+    // 静默时段跨字段校验：用「当前设置 + 本次补丁」算有效值——
+    // 开启时两端都必须有且不相等（只在本次有改动时才校验，避免误伤无关 patch）。
+    if (
+      patch.quietEnabled !== undefined ||
+      patch.quietStart !== undefined ||
+      patch.quietEnd !== undefined
+    ) {
+      const current = await store.getReminderSettings(auth.userId);
+      const enabled = patch.quietEnabled ?? current.quietHours.enabled;
+      const start = patch.quietStart ?? current.quietHours.start;
+      const end = patch.quietEnd ?? current.quietHours.end;
+      if (enabled) {
+        if (start === '' || end === '') {
+          reply.code(400);
+          return { error: 'invalid_field', message: 'quiet_hours 开启时 quiet_start 与 quiet_end 都必须提供' };
+        }
+        if (start === end) {
+          reply.code(400);
+          return { error: 'invalid_field', message: 'quiet_start 与 quiet_end 不能相同' };
+        }
+      }
     }
 
     const settings = await store.updateReminderSettings(auth.userId, patch);

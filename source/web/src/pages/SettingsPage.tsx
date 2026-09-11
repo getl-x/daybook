@@ -202,9 +202,56 @@ export function SettingsPage({ session, onLogout }: Props) {
               />
             </label>
 
+            <label className="flex items-center justify-between gap-4">
+              <span className="text-sm text-slate-600 dark:text-slate-300">
+                静默时段
+                <span className="ml-2 text-xs text-slate-400">（这段时间内不打扰）</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.quiet_hours.enabled}
+                disabled={busy}
+                onChange={(event) =>
+                  void save({
+                    quiet_enabled: event.target.checked,
+                    // 开启时两端必须都有：没设过就给默认 22:00–07:00
+                    quiet_start: settings.quiet_hours.start || '22:00',
+                    quiet_end: settings.quiet_hours.end || '07:00',
+                  })
+                }
+                className="h-4 w-4"
+              />
+            </label>
+
+            {settings.quiet_hours.enabled ? (
+              <label className="flex items-center justify-between gap-4">
+                <span className="text-sm text-slate-600 dark:text-slate-300">静默起止</span>
+                <span className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={settings.quiet_hours.start || '22:00'}
+                    disabled={busy}
+                    onChange={(event) => void save({ quiet_start: event.target.value })}
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                  <span className="text-slate-400">–</span>
+                  <input
+                    type="time"
+                    value={settings.quiet_hours.end || '07:00'}
+                    disabled={busy}
+                    onChange={(event) => void save({ quiet_end: event.target.value })}
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </span>
+              </label>
+            ) : null}
+
             <p className="text-xs text-slate-400">
               提醒按你的时区在设定时间发出，但<strong className="font-medium">不保证正好整点</strong>
               ：推送要经过系统通知服务，可能被延迟或在省电模式下晚一些。
+            </p>
+            <p className="text-xs text-slate-400">
+              落在静默时段内的提醒会推迟到静默结束；推迟太晚（超过 12 小时或跨过下一个日界）则当天不发。
             </p>
           </section>
 

@@ -118,6 +118,22 @@ export function createPgStore(db: Db): AppStore {
       await db.query('UPDATE users SET last_login_at = $2, updated_at = now() WHERE id = $1', [userId, at]);
     },
 
+    /* ------------------------------ 应用设置 ------------------------------ */
+
+    /** 应用级键值：目前只用于存自动生成的 VAPID 密钥（见 src/vapid.ts） */
+    async getAppSetting(key: string): Promise<string | null> {
+      const { rows } = await db.query<{ value: string }>('SELECT value FROM app_settings WHERE key = $1', [key]);
+      return rows[0]?.value ?? null;
+    },
+
+    async setAppSetting(key: string, value: string): Promise<void> {
+      await db.query(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, now())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+        [key, value],
+      );
+    },
+
     /* -------------------------------- 会话 -------------------------------- */
 
     /**

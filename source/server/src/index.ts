@@ -16,6 +16,7 @@ import { createPushSender } from './push.ts';
 import { runDueReminders } from './scheduler.ts';
 import { registerWebApp } from './static.ts';
 import { purgeExpiredAccounts } from './users.ts';
+import { resolveVapidKeys } from './vapid.ts';
 
 const config = loadConfig();
 const db = createPgDb({ connectionString: config.databaseUrl });
@@ -23,16 +24,30 @@ const db = createPgDb({ connectionString: config.databaseUrl });
 const ACCOUNT_DELETION_GRACE_DAYS = 7;
 // 两个 store 合成一个：日记/认证 + 提醒/推送
 const store = { ...createPgStore(db), ...createNotificationStore(db) };
-const app = buildApp({ config, store, now: () => new Date() });
 
-// 没配 VAPID 就不发送（服务照常启动，只是提醒发不出去——日志里会说清楚）
-const pushSender = config.vapid
-  ? createPushSender({
-      publicKey: config.vapid.publicKey,
-      privateKey: config.vapid.privateKey,
-      subject: config.vapid.subject,
-    })
-  : null;
+// VAPID 密钥解析（必须在 buildApp 之前）：环境变量 > 数据库已存 > 自动生成并入库。
+// 这样 Web Push 无需手配 .env 也能开箱可用（见 src/vapid.ts）。
+const resolvedVapid = await resolveVapidKeys({
+  envVapid: config.vapid,
+  subject: process.env.VAPID_SUBJECT,
+  store,
+  log: (level, message, extra) => {
+    const line = `[vapid] ${message}`;
+    if (level === 'error') console.error(line, extra ?? '');
+    else if (level === 'warn') console.warn(line, extra ?? '');
+    else console.log(line, extra ?? '');
+  },
+});
+const appConfig = { ...config, vapid: resolvedVapid };
+
+const app = buildApp({ config: appConfig, store, now: () => new Date() });
+
+// 密钥一定可用（缺就会自动生成）→ 推送发送器恒非 null
+const pushSender = createPushSender({
+  publicKey: resolvedVapid.publicKey,
+  privateKey: resolvedVapid.privateKey,
+  subject: resolvedVapid.subject,
+});
 
 const TICK_MS = 60_000;
 
@@ -56,7 +71,6 @@ async function tick(): Promise<void> {
 const webDistDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist');
 const servedWeb = await registerWebApp(app, webDistDir);
 app.log.info(servedWeb ? `前端产物已挂载：${webDistDir}` : `未找到前端产物（${webDistDir}），本次只提供 API`);
-if (!pushSender) app.log.warn('未配置 VAPID 密钥：提醒功能不可用（.env 里补 VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY）');
 
 let shuttingDown = false;
 let tickTimer: ReturnType<typeof setInterval> | null = null;

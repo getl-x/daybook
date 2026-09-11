@@ -11,7 +11,7 @@ A private, self-hosted guided journal: **review yesterday and plan today in the 
 - **Incidents** are filed under a day automatically from their timestamp (timezone- and day-boundary-aware).
 - **Field-level autosave** with an explicit conflict notice when a write overwrites something newer.
 - **Offline drafts** kept in IndexedDB and replayed once you're back online.
-- **Daily Web Push reminders** (VAPID) with per-user timezone and day boundary (the journal day starts at 04:00 local).
+- **Daily Web Push reminders** (VAPID) with per-user timezone and day boundary (the journal day starts at 04:00 local); **quiet hours** defer reminders inside a window to its end (skip for the day if too late). VAPID keys are auto-generated — nothing to configure.
 - **Installable PWA** — add to home screen; Web Push works on iOS 16.4+ too.
 - **Optional Android APK** (a Capacitor shell); you enter your server address on first launch.
 - **Registration is disabled**; accounts are created with a CLI.
@@ -25,7 +25,7 @@ git clone https://github.com/getl-x/daybook.git
 cd daybook
 
 cp deploy/daybook.env.example .env
-# Edit .env: set POSTGRES_PASSWORD and JWT_SECRET (>= 32 chars). VAPID_* is optional.
+# Edit .env: set POSTGRES_PASSWORD and JWT_SECRET (>= 32 chars). VAPID keys are auto-generated — nothing else to configure.
 
 docker pull ghcr.io/getl-x/daybook:0.1.2
 

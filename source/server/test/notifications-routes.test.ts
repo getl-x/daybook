@@ -382,3 +382,33 @@ describe('提醒与订阅的存储层（真实 SQL）', () => {
     await db.close();
   });
 });
+
+describe('PATCH /v1/settings 静默时段', () => {
+  it('校验：非法 HH:MM / 开启缺一端 / start==end 都 400；合法则 200 并可关闭', async () => {
+    const { app, aliceHeaders } = setup();
+    const patch = (payload: Record<string, unknown>) =>
+      app.inject({ method: 'PATCH', url: '/v1/settings', headers: aliceHeaders, payload });
+
+    assert.equal((await patch({ quiet_start: '25:00' })).statusCode, 400);
+    assert.equal((await patch({ quiet_end: '9:0' })).statusCode, 400);
+    assert.equal((await patch({ quiet_enabled: true, quiet_start: '22:00' })).statusCode, 400);
+    assert.equal((await patch({ quiet_enabled: true, quiet_start: '22:00', quiet_end: '22:00' })).statusCode, 400);
+
+    const ok = await patch({ quiet_enabled: true, quiet_start: '22:00', quiet_end: '07:00' });
+    assert.equal(ok.statusCode, 200);
+    assert.deepEqual(ok.json().quiet_hours, { enabled: true, start: '22:00', end: '07:00' });
+
+    const off = await patch({ quiet_enabled: false });
+    assert.equal(off.statusCode, 200);
+    assert.equal(off.json().quiet_hours.enabled, false);
+    await app.close();
+  });
+
+  it('GET /v1/settings 也带出 quiet_hours 字段（默认关闭）', async () => {
+    const { app, aliceHeaders } = setup();
+    const response = await app.inject({ method: 'GET', url: '/v1/settings', headers: aliceHeaders });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json().quiet_hours, { enabled: false, start: '', end: '' });
+    await app.close();
+  });
+});

@@ -124,6 +124,9 @@ export interface AppStore {
   updateIncident(userId: string, id: string, changes: IncidentChanges): Promise<Incident | null>;
   deleteIncident(userId: string, id: string): Promise<boolean>;
   listEntryDates(userId: string, startDate: string, endDate: string): Promise<CalendarDay[]>;
+  /** 应用级键值设置（如自动生成的 VAPID 密钥，见 src/vapid.ts） */
+  getAppSetting(key: string): Promise<string | null>;
+  setAppSetting(key: string, value: string): Promise<void>;
 }
 
 export interface BuildAppOptions {

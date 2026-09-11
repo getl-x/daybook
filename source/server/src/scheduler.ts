@@ -23,6 +23,7 @@ import {
   type ReminderSettings,
 } from './notifications.ts';
 import type { PushSender } from './push.ts';
+import { applyQuietHours } from './quiet-hours.ts';
 
 const MAX_ATTEMPTS = 3;
 const DUE_BATCH = 200;
@@ -43,6 +44,8 @@ export interface SchedulerReport {
   skipped: number;
   failed: number;
   replayed: number;
+  /** 因落在静默时段而被推迟到窗口结束的条数 */
+  deferred: number;
   disabledSubscriptions: number;
   /** 处理某条排程时抛异常的次数（脏数据/数据库抖动），不影响其他用户 */
   errors: number;
@@ -68,6 +71,7 @@ export async function runDueReminders(deps: SchedulerDeps, now: Date = deps.now(
     skipped: 0,
     failed: 0,
     replayed: 0,
+    deferred: 0,
     disabledSubscriptions: 0,
     errors: 0,
   };
@@ -119,6 +123,33 @@ async function processSchedule(
 
   const settings = await deps.store.getReminderSettings(userId);
   const localDate = reminderLocalDate(kind, nextFireAt, settings);
+
+  // 0) 静默时段：仅在还没有任何送达记录时才评估（已经进入重试的提醒不该被再次推迟）。
+  //    defer → 把投递时刻推迟到窗口结束（复用现有排程与幂等键，不新开一套状态）；
+  //    skip  → 写一条 skipped 记录并推进排程，当天不再打扰。
+  const existingDelivery = await deps.store.getDelivery(userId, localDate, kind);
+  if (existingDelivery === null) {
+    const decision = applyQuietHours({
+      deliverAt: nextFireAt,
+      quiet: settings.quietHours,
+      timezone: settings.timezone,
+      dayStartHour: settings.dayStartHour,
+    });
+    if (decision.action === 'defer' && decision.at) {
+      await deps.store.setSchedule(userId, kind, decision.at);
+      report.deferred += 1;
+      deps.log('info', '提醒落在静默时段，推迟到窗口结束', { userId, kind, at: decision.at.toISOString() });
+      return;
+    }
+    if (decision.action === 'skip') {
+      await deps.store.beginDelivery(userId, localDate, kind);
+      await deps.store.finishDelivery(userId, localDate, kind, 'skipped', decision.reason ?? null);
+      report.skipped += 1;
+      deps.log('info', '提醒落在静默时段且推迟过晚，当天跳过', { userId, kind });
+      await advance(deps, userId, settings, kind, localDate, report, now);
+      return;
+    }
+  }
 
   // 1) 幂等占位：重复 tick、重启、多进程都只会产生一条记录
   const firstTime = await deps.store.beginDelivery(userId, localDate, kind);

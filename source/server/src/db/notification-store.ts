@@ -26,6 +26,9 @@ interface SettingsRow {
   evening_reminder_enabled: boolean;
   evening_time: string;
   notify_only_if_incomplete: boolean;
+  quiet_enabled: boolean;
+  quiet_start: string | null;
+  quiet_end: string | null;
 }
 
 interface SubscriptionRow {
@@ -45,7 +48,8 @@ const SUBSCRIPTION_SELECT =
 const SETTINGS_SELECT = `timezone, day_start_hour,
   morning_reminder_enabled, to_char(morning_reminder_time, 'HH24:MI') AS morning_time,
   evening_reminder_enabled, to_char(evening_reminder_time, 'HH24:MI') AS evening_time,
-  notify_only_if_incomplete`;
+  notify_only_if_incomplete,
+  quiet_enabled, to_char(quiet_start, 'HH24:MI') AS quiet_start, to_char(quiet_end, 'HH24:MI') AS quiet_end`;
 
 function toSettings(row: SettingsRow | undefined): ReminderSettings {
   if (!row) {
@@ -57,6 +61,7 @@ function toSettings(row: SettingsRow | undefined): ReminderSettings {
       eveningReminderEnabled: true,
       eveningReminderTime: '21:00',
       notifyOnlyIfIncomplete: true,
+      quietHours: { enabled: false, start: '', end: '' },
     };
   }
   return {
@@ -67,6 +72,7 @@ function toSettings(row: SettingsRow | undefined): ReminderSettings {
     eveningReminderEnabled: row.evening_reminder_enabled,
     eveningReminderTime: row.evening_time,
     notifyOnlyIfIncomplete: row.notify_only_if_incomplete,
+    quietHours: { enabled: row.quiet_enabled, start: row.quiet_start ?? '', end: row.quiet_end ?? '' },
   };
 }
 
@@ -108,6 +114,9 @@ export function createNotificationStore(db: Db): NotificationStore {
         eveningReminderTime: string;
         notifyOnlyIfIncomplete: boolean;
         theme: string;
+        quietEnabled: boolean;
+        quietStart: string;
+        quietEnd: string;
       }>,
     ): Promise<ReminderSettings> {
       const columns: Record<keyof typeof patch, string> = {
@@ -119,6 +128,9 @@ export function createNotificationStore(db: Db): NotificationStore {
         eveningReminderTime: 'evening_reminder_time',
         notifyOnlyIfIncomplete: 'notify_only_if_incomplete',
         theme: 'theme',
+        quietEnabled: 'quiet_enabled',
+        quietStart: 'quiet_start',
+        quietEnd: 'quiet_end',
       };
 
       const sets: string[] = [];

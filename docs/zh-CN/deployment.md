@@ -57,9 +57,15 @@ JWT_SECRET=<上面第二条的输出>
 NODE_ENV=production
 ```
 
-### VAPID（Web Push 密钥；不配也能启动，只是提醒发不出去）
+### VAPID（Web Push 密钥；**不用配**）
 
-任选一种，输出里 Public / Private Key 各一行：
+服务端首次启动时会**自动生成**一对 VAPID 密钥并存入数据库（`app_settings` 表），之后每次启动都复用；**.env 里什么都不用填**。
+
+只有两种情况才需要手动配置（配置后以环境变量优先）：
+- 想在多实例 / 迁移时**固定**同一对密钥；
+- 从旧部署（密钥原本在 .env）沿用已经订阅的设备。
+
+手动生成时，任选一种，输出里 Public / Private Key 各一行：
 
 ```bash
 # A. 借已拉的镜像里的依赖生成（无需本机装 node；需先做第 3 步的 docker pull）
@@ -69,15 +75,13 @@ docker run --rm --entrypoint npx ghcr.io/getl-x/daybook:0.1.2 web-push generate-
 npx web-push generate-vapid-keys
 ```
 
-填进 .env：
-
 ```ini
 VAPID_PUBLIC_KEY=<Public Key>
 VAPID_PRIVATE_KEY=<Private Key>
-VAPID_SUBJECT=mailto:you@example.com    # ← 改成你的邮箱
+VAPID_SUBJECT=mailto:you@example.com    # 可选；不填默认 mailto:noreply@localhost
 ```
 
-> ⚠️ VAPID 私钥是"已订阅设备"的身份：**换密钥或丢失 = 所有设备重新订阅**。和 .env 一起安全备份。
+> ⚠️ VAPID 私钥是"已订阅设备"的身份：**换密钥或丢失 = 所有设备重新订阅**。自动生成的密钥随数据库一起备份；手配在 .env 的请连同 .env 一起保管。
 
 **`CORS_ORIGINS` 不用改**：浏览器里的 PWA 与后端同源、根本用不到 CORS；Android APK 的源 `https://localhost` 已在默认名单里放行。只有在别处（例如另一个域名的自建页面）要调接口时才需要加。
 

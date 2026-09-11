@@ -16,18 +16,19 @@ describe('迁移跑器', () => {
     const db = await createTestDb({ migrate: false });
 
     const first = await runMigrations(db, MIGRATIONS_DIR);
-    assert.deepEqual(first.applied, ['0000_init.sql', '0001_account_deletion.sql']);
+    assert.deepEqual(first.applied, ['0000_init.sql', '0001_account_deletion.sql', '0002_app_settings_and_quiet_hours.sql']);
     assert.deepEqual(first.skipped, []);
 
     const second = await runMigrations(db, MIGRATIONS_DIR);
     assert.deepEqual(second.applied, []);
-    assert.deepEqual(second.skipped, ['0000_init.sql', '0001_account_deletion.sql']);
+    assert.deepEqual(second.skipped, ['0000_init.sql', '0001_account_deletion.sql', '0002_app_settings_and_quiet_hours.sql']);
 
     const { rows } = await db.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name`,
     );
     const tables = rows.map((row) => row.table_name);
     for (const expected of [
+      'app_settings',
       'daily_entries',
       'incidents',
       'notification_deliveries',

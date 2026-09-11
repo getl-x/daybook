@@ -11,7 +11,7 @@
 - **突发事情**按时间自动归属到某一天（考虑时区与日界）。
 - **字段级自动保存**，写入覆盖了更新的内容时会明确提示冲突。
 - **离线草稿**：存在 IndexedDB 里，恢复联网后自动重放。
-- **每日 Web Push 提醒**（VAPID），支持每用户时区与日界（日记日从本地 04:00 起算）。
+- **每日 Web Push 提醒**（VAPID），支持每用户时区与日界（日记日从本地 04:00 起算）；**静默时段**会把窗口内的提醒推迟到窗口结束（太晚则当天不发）。VAPID 密钥自动生成，无需配置。
 - **可安装的 PWA**：添加到主屏即可；iOS 16.4+ 也能收 Web Push。
 - **可选 Android APK**（Capacitor 壳），首次启动填写服务器地址。
 - **注册关闭**，账号用 CLI 创建。
@@ -25,7 +25,7 @@ git clone https://github.com/getl-x/daybook.git
 cd daybook
 
 cp deploy/daybook.env.example .env
-# 编辑 .env：填好 POSTGRES_PASSWORD 与 JWT_SECRET（≥ 32 字符）。VAPID_* 可选。
+# 编辑 .env：填好 POSTGRES_PASSWORD 与 JWT_SECRET（≥ 32 字符）。VAPID 密钥自动生成，无需配置。
 
 docker pull ghcr.io/getl-x/daybook:0.1.2
 

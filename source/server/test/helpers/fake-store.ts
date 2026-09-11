@@ -46,6 +46,8 @@ export interface FakeStore extends AppStore, NotificationStore {
   readonly schedules: Map<string, Date | null>;
   readonly deliveries: Map<string, StoredDelivery>;
   readonly pushSubscriptions: Map<string, PushSubscriptionRecord & { userId: string }>;
+  /** 应用级键值设置（如自动生成的 VAPID 密钥） */
+  readonly appSettings: Map<string, string>;
   setSettings(userId: string, settings: UserSettings): void;
   addUser(input: { username: string; passwordHash: string; status?: UserRecord['status'] }): UserRecord;
   /** 直接塞一条突发事情（含归属人），用于读接口测试 */
@@ -63,6 +65,7 @@ const DEFAULT_REMINDERS: Omit<ReminderSettings, 'timezone' | 'dayStartHour'> = {
   eveningReminderEnabled: true,
   eveningReminderTime: '21:00',
   notifyOnlyIfIncomplete: true,
+  quietHours: { enabled: false, start: '', end: '' },
 };
 
 /** 与 SQL 实现里的 FAILURE_LIMIT 保持一致 */
@@ -86,6 +89,7 @@ export function createFakeStore(): FakeStore {
   const deliveries = new Map<string, StoredDelivery>();
   /** key: subscription id（endpoint 唯一） */
   const pushSubscriptions = new Map<string, PushSubscriptionRecord & { userId: string }>();
+  const appSettings = new Map<string, string>();
 
   const entryKey = (userId: string, date: string): string => `${userId}:${date}`;
   const scheduleKey = (userId: string, kind: ReminderKind): string => `${userId}:${kind}`;
@@ -100,6 +104,7 @@ export function createFakeStore(): FakeStore {
     schedules,
     deliveries,
     pushSubscriptions,
+    appSettings,
     failPing: false,
 
     setSettings(userId, value) {
@@ -190,6 +195,14 @@ export function createFakeStore(): FakeStore {
 
     async getUserSettings(userId) {
       return settings.get(userId) ?? { timezone: 'Asia/Shanghai', dayStartHour: 4 };
+    },
+
+    async getAppSetting(key) {
+      return appSettings.get(key) ?? null;
+    },
+
+    async setAppSetting(key, value) {
+      appSettings.set(key, value);
     },
 
     async getDiaryEntry(userId, entryDate) {
@@ -316,6 +329,9 @@ export function createFakeStore(): FakeStore {
       if (patch.eveningReminderEnabled !== undefined) next.eveningReminderEnabled = patch.eveningReminderEnabled;
       if (patch.eveningReminderTime !== undefined) next.eveningReminderTime = patch.eveningReminderTime;
       if (patch.notifyOnlyIfIncomplete !== undefined) next.notifyOnlyIfIncomplete = patch.notifyOnlyIfIncomplete;
+      if (patch.quietEnabled !== undefined) next.quietHours = { ...next.quietHours, enabled: patch.quietEnabled };
+      if (patch.quietStart !== undefined) next.quietHours = { ...next.quietHours, start: patch.quietStart };
+      if (patch.quietEnd !== undefined) next.quietHours = { ...next.quietHours, end: patch.quietEnd };
       reminderSettings.set(userId, next);
       settings.set(userId, { timezone: next.timezone, dayStartHour: next.dayStartHour });
       return next;

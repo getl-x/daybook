@@ -272,6 +272,14 @@ export interface SettingsView {
     evening_time: string;
     only_if_incomplete: boolean;
   };
+  /** 静默时段：落在窗口内的提醒推迟到窗口结束（窗口可跨午夜） */
+  quiet_hours: {
+    enabled: boolean;
+    /** 'HH:MM'；未设置时为空串 */
+    start: string;
+    /** 'HH:MM'；未设置时为空串 */
+    end: string;
+  };
   push: {
     /** 服务端没配 VAPID 时为 null（此时"开启每日提醒"不可用） */
     vapid_public_key: string | null;
