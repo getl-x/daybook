@@ -79,7 +79,7 @@ gh variable set DAYBOOK_SERVER_URL --body 'https://你的域名'
 **Secrets** —— 可选。配了就出正式签名包，没配自动退化成 debug 签名包。用你现有的 `.jks`：
 
 ```bash
-keytool -list -v -keystore 你的.jks        # 看 keyAlias（顺便确认口令对）
+keytool -list -v -keystore 你的.jks        # 输出里的 "Alias name" / "别名" 就是 ANDROID_KEY_ALIAS（顺便确认口令对）
 base64 -w0 你的.jks > keystore.b64
 gh secret set ANDROID_KEYSTORE_BASE64 < keystore.b64
 gh secret set ANDROID_KEYSTORE_PASSWORD
@@ -88,6 +88,7 @@ gh secret set ANDROID_KEY_PASSWORD
 rm keystore.b64                            # 别把 base64 文件留在本地
 ```
 
+- `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` 这三个 secret 与 lastdone 仓库同名，可直接用同一套值。
 - 四个 secret 缺任意一个，`android-release.yml` 就退化成 **debug 签名包**：能装能测，但密钥是公开的调试密钥，**不能当正式版升级**（换正式包要卸载重装）。
 - 仓库里只有 `source/web/android/keystore.properties.example`；真实的 `.jks` 与 `keystore.properties` 都不进仓库（`.gitignore` 已排除）。
 

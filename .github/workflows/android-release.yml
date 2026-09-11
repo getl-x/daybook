@@ -63,9 +63,14 @@ jobs:
             echo "::warning::仓库变量 DAYBOOK_SERVER_URL 没设——这个 APK 里没有后端地址，装上也连不上服务器"
           fi
           signable=true
-          for name in ANDROID_KEYSTORE_BASE64 DAYBOOK_KEYSTORE_PASSWORD DAYBOOK_KEY_ALIAS DAYBOOK_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "::warning::缺少 secret ${name}，这次出 debug 签名包"
+          for pair in ANDROID_KEYSTORE_BASE64:ANDROID_KEYSTORE_BASE64 \
+                      DAYBOOK_KEYSTORE_PASSWORD:ANDROID_KEYSTORE_PASSWORD \
+                      DAYBOOK_KEY_ALIAS:ANDROID_KEY_ALIAS \
+                      DAYBOOK_KEY_PASSWORD:ANDROID_KEY_PASSWORD; do
+            var="${pair%%:*}"
+            secret="${pair##*:}"
+            if [ -z "${!var:-}" ]; then
+              echo "::warning::缺少 secret ${secret}，这次出 debug 签名包（名字要一字不差）"
               signable=false
             fi
           done
