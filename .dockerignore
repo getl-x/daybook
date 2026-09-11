@@ -18,6 +18,9 @@ source/**/.vite/
 source/**/.cache/
 source/**/*.tsbuildinfo
 
+# Android 工程（Capacitor 壳）：镜像里用不到，而且 build/、.gradle/ 体积很大
+source/**/android/
+
 # 本地密钥（绝不进镜像）
 source/**/.env
 source/**/.env.*
