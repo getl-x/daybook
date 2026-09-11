@@ -287,10 +287,22 @@ export interface SettingsView {
   };
 }
 
+export interface SubscriptionDevice {
+  id: string;
+  /** 设备名（由客户端按 UA 推断，可空） */
+  label: string | null;
+  /** 平台：web / ios-pwa / android（可空） */
+  platform: string | null;
+  /** 是否启用（可单独开关） */
+  enabled: boolean;
+  created_at: string;
+  failure_count: number;
+}
+
 export interface NotificationStatus {
   vapid_public_key: string | null;
   push_configured: boolean;
-  subscriptions: { id: string; created_at: string; failure_count: number }[];
+  subscriptions: SubscriptionDevice[];
   recent_deliveries: {
     local_date: string;
     kind: 'morning' | 'evening';
@@ -323,6 +335,16 @@ export async function fetchTimezones(): Promise<string[]> {
 
 export async function deleteSubscription(id: string): Promise<void> {
   await apiFetch(`/v1/notifications/subscriptions/${id}`, { method: 'DELETE' });
+}
+
+/** 单独启用/停用某台设备的推送；返回更新后的订阅（以服务端为准）。 */
+export async function patchSubscription(id: string, enabled: boolean): Promise<SubscriptionDevice> {
+  const response = await apiFetch(`/v1/notifications/subscriptions/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  });
+  const body = (await response.json()) as { subscription: SubscriptionDevice };
+  return body.subscription;
 }
 
 export interface CalendarDay {

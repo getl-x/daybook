@@ -230,6 +230,101 @@ describe('推送订阅接口', () => {
     await app.close();
   });
 
+  it('设备标签：注册带 label/platform 会落库并在列表与状态里返回，非法 platform → 400，超长 label 截断', async () => {
+    const { app, aliceHeaders } = setup();
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/notifications/subscriptions',
+      headers: aliceHeaders,
+      payload: { ...validSubscription, label: '  iPhone · Safari  ', platform: 'ios-pwa' },
+    });
+    assert.equal(created.statusCode, 200);
+    assert.equal(created.json().subscription.label, 'iPhone · Safari', 'label 去首尾空白');
+    assert.equal(created.json().subscription.platform, 'ios-pwa');
+    assert.equal(created.json().subscription.enabled, true);
+
+    const list = await app.inject({ method: 'GET', url: '/v1/notifications/subscriptions', headers: aliceHeaders });
+    assert.equal(list.statusCode, 200);
+    assert.equal(list.json().subscriptions.length, 1);
+    assert.equal(list.json().subscriptions[0].label, 'iPhone · Safari');
+    assert.equal(list.json().subscriptions[0].platform, 'ios-pwa');
+    assert.equal(list.json().subscriptions[0].enabled, true);
+
+    const status = await app.inject({ method: 'GET', url: '/v1/notifications/status', headers: aliceHeaders });
+    assert.equal(status.json().subscriptions[0].label, 'iPhone · Safari');
+    assert.equal(status.json().subscriptions[0].platform, 'ios-pwa');
+    assert.equal(status.json().subscriptions[0].enabled, true);
+
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/v1/notifications/subscriptions',
+      headers: aliceHeaders,
+      payload: { ...validSubscription, platform: 'blackberry' },
+    });
+    assert.equal(bad.statusCode, 400);
+
+    const long = await app.inject({
+      method: 'POST',
+      url: '/v1/notifications/subscriptions',
+      headers: aliceHeaders,
+      payload: { ...validSubscription, label: 'x'.repeat(60), platform: 'web' },
+    });
+    assert.equal(long.statusCode, 200);
+    assert.equal(long.json().subscription.label.length, 40, '超长 label 截断到 40');
+    await app.close();
+  });
+
+  it('GET /v1/notifications/subscriptions 需登录', async () => {
+    const { app } = setup();
+    assert.equal((await app.inject({ method: 'GET', url: '/v1/notifications/subscriptions' })).statusCode, 401);
+    await app.close();
+  });
+
+  it('PATCH .../subscriptions/:id：停用/启用、幂等；别人的 id 与不存在的 id → 404', async () => {
+    const { app, aliceHeaders, bobHeaders } = setup();
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/notifications/subscriptions',
+      headers: aliceHeaders,
+      payload: { ...validSubscription, label: '设备A', platform: 'web' },
+    });
+    const id = created.json().subscription.id as string;
+    const patch = (headers: Record<string, string>, payload: Record<string, unknown>) =>
+      app.inject({ method: 'PATCH', url: `/v1/notifications/subscriptions/${id}`, headers, payload });
+
+    const off = await patch(aliceHeaders, { enabled: false });
+    assert.equal(off.statusCode, 200);
+    assert.equal(off.json().subscription.enabled, false);
+    const offAgain = await patch(aliceHeaders, { enabled: false });
+    assert.equal(offAgain.statusCode, 200, '幂等：重复置相同值仍 200');
+    assert.equal(offAgain.json().subscription.enabled, false);
+
+    // 停用后仍能在设备列表里看到（只是 enabled=false）
+    const list = await app.inject({ method: 'GET', url: '/v1/notifications/subscriptions', headers: aliceHeaders });
+    assert.equal(list.json().subscriptions.length, 1);
+    assert.equal(list.json().subscriptions[0].enabled, false);
+
+    const on = await patch(aliceHeaders, { enabled: true });
+    assert.equal(on.statusCode, 200);
+    assert.equal(on.json().subscription.enabled, true);
+
+    assert.equal((await patch(bobHeaders, { enabled: false })).statusCode, 404, '别人的订阅 → 404');
+    assert.equal(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: '/v1/notifications/subscriptions/11111111-1111-1111-1111-111111111111',
+          headers: aliceHeaders,
+          payload: { enabled: false },
+        })
+      ).statusCode,
+      404,
+      '不存在的 id → 404',
+    );
+    assert.equal((await patch(aliceHeaders, { enabled: 'yes' })).statusCode, 400, 'enabled 非布尔 → 400');
+    await app.close();
+  });
+
   it('GET /v1/meta/timezones 需要登录，登录后返回 IANA 列表', async () => {
     const { app, aliceHeaders } = setup();
 
@@ -379,6 +474,40 @@ describe('提醒与订阅的存储层（真实 SQL）', () => {
     assert.equal(await store.deletePushSubscription(bob.id, subscription.id), false);
     assert.equal(await store.deletePushSubscription(alice.id, subscription.id), true);
     assert.equal(await store.deletePushSubscription(alice.id, subscription.id), false);
+    await db.close();
+  });
+
+  it('订阅标签与启停（真实 SQL）：label/platform 可读写，setSubscriptionEnabled 复用 disabled_at', async () => {
+    const { db, store, alice, bob } = await sqlSetup();
+    const created = await store.upsertPushSubscription(alice.id, {
+      endpoint: ENDPOINT,
+      p256dh: 'p1',
+      auth: 'a1',
+      label: 'Mac · Chrome',
+      platform: 'web',
+    });
+    assert.equal(created.label, 'Mac · Chrome');
+    assert.equal(created.platform, 'web');
+    assert.equal(created.disabledAt, null);
+
+    // 再上报同一 endpoint 且不带 label 时保留旧值（COALESCE），不把设备名抹掉
+    const again = await store.upsertPushSubscription(alice.id, { endpoint: ENDPOINT, p256dh: 'p2', auth: 'a2' });
+    assert.equal(again.label, 'Mac · Chrome');
+    assert.equal(again.platform, 'web');
+
+    assert.equal(await store.setSubscriptionEnabled(alice.id, created.id, false), true);
+    assert.deepEqual(await store.listPushSubscriptions(alice.id), [], '停用后不参与发送');
+    const all = await store.listAllPushSubscriptions(alice.id);
+    assert.equal(all.length, 1, '设备列表仍能看到停用的设备');
+    assert.ok(all[0]?.disabledAt instanceof Date);
+
+    assert.equal(await store.setSubscriptionEnabled(alice.id, created.id, false), true, '幂等');
+    assert.equal(await store.setSubscriptionEnabled(alice.id, created.id, true), true);
+    assert.equal((await store.listPushSubscriptions(alice.id)).length, 1, '重新启用后回到可用列表');
+    assert.equal((await store.listAllPushSubscriptions(alice.id))[0]?.disabledAt, null);
+
+    assert.equal(await store.setSubscriptionEnabled(bob.id, created.id, false), false, '别人的 id → false');
+    assert.equal(await store.setSubscriptionEnabled(alice.id, '00000000-0000-0000-0000-000000000000', false), false);
     await db.close();
   });
 });

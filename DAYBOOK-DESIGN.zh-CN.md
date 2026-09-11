@@ -48,7 +48,7 @@
 
 ### 1.3 明确不做
 
-社交、AI 代写、图片/语音/附件、周报月报、多人协作与家庭账号、完整离线同步冲突合并 UI、多语言、**公开注册**、**上架应用商店**（APK 只走 GitHub Releases 侧载）、多设备管理页、**镜像内置 TLS/反代**。
+社交、AI 代写、图片/语音/附件、周报月报、多人协作与家庭账号、完整离线同步冲突合并 UI、多语言、**公开注册**、**上架应用商店**（APK 只走 GitHub Releases 侧载）、**镜像内置 TLS/反代**。
 
 ### 1.4 提醒的可靠性口径
 
@@ -237,9 +237,11 @@ PATCH  /v1/settings                         # 时区、日记日起始时间、�
 PUT    /v1/settings/reminders               # 提醒时间与开关（触发排程重算）
 
 # 推送订阅
-POST   /v1/notifications/subscriptions      # upsert（endpoint 唯一）
+POST   /v1/notifications/subscriptions      # upsert（endpoint 唯一）；可带 label / platform
 POST   /v1/notifications/subscriptions/heartbeat
 DELETE /v1/notifications/subscriptions/:id
+PATCH  /v1/notifications/subscriptions/:id  # { enabled } 单独启用/停用某台设备
+GET    /v1/notifications/subscriptions      # 设备列表（label / platform / enabled）
 GET    /v1/notifications/status             # 已订阅设备数、最近发送结果
 
 # 账号
@@ -400,8 +402,11 @@ tick 循环（每分钟）：
   → 无条件重算 next_fire_at = nextFireAt(now, …)   # source/shared/src/time.ts
 ```
 
-### 8.3 订阅管理
+### 8.3 设备列表与订阅管理
 
+- **多设备可辨识**：注册订阅时带上 `label`（按 UA 推断，例「iPhone · Safari」）与 `platform`（`web` / `ios-pwa` / `android`）；服务端存 `push_subscriptions.label` / `platform`（迁移 `0003_device_labels.sql`）。
+- **每设备开关**：设置页把订阅列成「设备列表」，每行显示设备名（没有则“未命名设备”）、平台（手机 / 电脑 / 其他）、创建时间与失败次数，右侧可单独**启用/停用**（`PATCH /v1/notifications/subscriptions/:id`，body `{ enabled }`）。启停复用既有 `disabled_at` 列（NULL = 启用），没有新增 `enabled` 列。
+- 发送只取启用（`disabled_at IS NULL`）的订阅；停用的设备仍留在列表里供重新启用。
 - 前端**每次应用启动**检查 `pushManager.getSubscription()`：存在则上报心跳（幂等 upsert）；不存在**不主动弹权限**；
 - **不要依赖 `pushsubscriptionchange`**（WebKit 支持不可靠，待真机确认）——启动时主动校验才是可靠路径；
 - VAPID 密钥只放 `.env`；端点视为敏感信息，日志里不出现完整 endpoint。
@@ -639,11 +644,13 @@ CREATE TABLE push_subscriptions (
   p256dh          text NOT NULL,
   auth            text NOT NULL,
   user_agent      text,
+  label           text,                          -- 设备名（迁移 0003 新增，可空）
+  platform        text,                          -- web / ios-pwa / android（迁移 0003 新增，可空）
   created_at      timestamptz NOT NULL DEFAULT now(),
   last_seen_at    timestamptz,
   last_success_at timestamptz,
   failure_count   integer NOT NULL DEFAULT 0,
-  disabled_at     timestamptz
+  disabled_at     timestamptz                    -- NULL = 启用；停用/失效都置这个列
 );
 CREATE INDEX push_subscriptions_user_idx ON push_subscriptions (user_id) WHERE disabled_at IS NULL;
 

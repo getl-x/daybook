@@ -37,13 +37,15 @@ interface SubscriptionRow {
   p256dh: string;
   auth: string;
   user_agent: string | null;
+  label: string | null;
+  platform: string | null;
   disabled_at: string | Date | null;
   failure_count: number;
   created_at: string | Date;
 }
 
 const SUBSCRIPTION_SELECT =
-  'id, endpoint, p256dh, auth, user_agent, disabled_at, failure_count, created_at';
+  'id, endpoint, p256dh, auth, user_agent, label, platform, disabled_at, failure_count, created_at';
 
 const SETTINGS_SELECT = `timezone, day_start_hour,
   morning_reminder_enabled, to_char(morning_reminder_time, 'HH24:MI') AS morning_time,
@@ -83,6 +85,8 @@ function toSubscription(row: SubscriptionRow): PushSubscriptionRecord {
     p256dh: row.p256dh,
     auth: row.auth,
     userAgent: row.user_agent,
+    label: row.label,
+    platform: row.platform,
     disabledAt: row.disabled_at === null ? null : new Date(row.disabled_at),
     failureCount: Number(row.failure_count),
     createdAt: new Date(row.created_at),
@@ -256,23 +260,57 @@ export function createNotificationStore(db: Db): NotificationStore {
       return rows.map(toSubscription);
     },
 
+    /** 设置页设备列表：全部（含已停用），按创建时间排序 */
+    async listAllPushSubscriptions(userId: string): Promise<PushSubscriptionRecord[]> {
+      const { rows } = await db.query<SubscriptionRow>(
+        `SELECT ${SUBSCRIPTION_SELECT} FROM push_subscriptions
+         WHERE user_id = $1
+         ORDER BY created_at`,
+        [userId],
+      );
+      return rows.map(toSubscription);
+    },
+
     /** upsert：endpoint 唯一。同一浏览器换账号登录时会把订阅转到新账号名下。 */
     async upsertPushSubscription(userId: string, input: PushSubscriptionInput): Promise<PushSubscriptionRecord> {
       const { rows } = await db.query<SubscriptionRow>(
-        `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent, last_seen_at)
-         VALUES ($1, $2, $3, $4, $5, $6, now())
+        `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent, label, platform, last_seen_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
          ON CONFLICT (endpoint) DO UPDATE SET
            user_id = EXCLUDED.user_id,
            p256dh = EXCLUDED.p256dh,
            auth = EXCLUDED.auth,
            user_agent = EXCLUDED.user_agent,
+           label = COALESCE(EXCLUDED.label, push_subscriptions.label),
+           platform = COALESCE(EXCLUDED.platform, push_subscriptions.platform),
            last_seen_at = now(),
            failure_count = 0,
            disabled_at = NULL
          RETURNING ${SUBSCRIPTION_SELECT}`,
-        [randomUUID(), userId, input.endpoint, input.p256dh, input.auth, input.userAgent ?? null],
+        [
+          randomUUID(),
+          userId,
+          input.endpoint,
+          input.p256dh,
+          input.auth,
+          input.userAgent ?? null,
+          input.label ?? null,
+          input.platform ?? null,
+        ],
       );
       return toSubscription(rows[0] as SubscriptionRow);
+    },
+
+    /** 启用/停用：复用 disabled_at（启用 = NULL）。幂等，重复置相同值也成功。 */
+    async setSubscriptionEnabled(userId: string, id: string, enabled: boolean): Promise<boolean> {
+      const { rows } = await db.query<{ id: string }>(
+        `UPDATE push_subscriptions
+         SET disabled_at = CASE WHEN $3 THEN NULL ELSE COALESCE(disabled_at, now()) END
+         WHERE id = $1 AND user_id = $2
+         RETURNING id`,
+        [id, userId, enabled],
+      );
+      return rows.length > 0;
     },
 
     async deletePushSubscription(userId: string, id: string): Promise<boolean> {

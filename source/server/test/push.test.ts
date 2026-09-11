@@ -22,6 +22,8 @@ function subscription(endpoint: string): PushSubscriptionRecord {
     p256dh: 'BNcRvM5L5p2nS1FhJ0j5G7pQ1k2m3n4o5p6q7r8s9t0',
     auth: 'aBcDeFgHiJkLmNoPqRsTuV',
     userAgent: 'test',
+    label: null,
+    platform: null,
     disabledAt: null,
     failureCount: 0,
     createdAt: new Date('2026-09-10T00:00:00Z'),

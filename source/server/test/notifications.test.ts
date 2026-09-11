@@ -76,6 +76,8 @@ function addSubscription(store: FakeStore, userId: string, endpoint: string): Pu
     p256dh: 'p256dh-key',
     auth: 'auth-key',
     userAgent: 'test-agent',
+    label: '测试设备',
+    platform: 'web',
     disabledAt: null,
     failureCount: 0,
     createdAt: new Date(),
@@ -306,6 +308,24 @@ describe('调度器（内存 store + 假 sender）', () => {
     // now 是上海 09:00，当天的 07:30 已经过了 → 下一次是第二天 07:30（上海）= 09-10T23:30Z
     assert.equal(store.schedules.get(`${user.id}:morning`)?.toISOString(), '2026-09-10T23:30:00.000Z');
     assert.equal(store.schedules.get(`${user.id}:evening`), null);
+  });
+
+  it('排程只取启用的订阅：停用的设备不发送', async () => {
+    const store = createFakeStore();
+    const user = store.addUser({ username: 'getl', passwordHash: 'x' });
+    await store.updateReminderSettings(user.id, { notifyOnlyIfIncomplete: false });
+    store.seedSchedule(user.id, 'morning', FIRE_AT);
+    const active = addSubscription(store, user.id, 'https://push.example/active');
+    const muted = addSubscription(store, user.id, 'https://push.example/muted');
+    await store.setSubscriptionEnabled(user.id, muted.id, false);
+
+    const { sender, sent } = createFakeSender(() => ({ status: 'sent' }));
+    const { deps } = makeDeps(store, sender, FIRE_AT);
+    const report = await runDueReminders(deps, FIRE_AT);
+
+    assert.equal(report.sent, 1);
+    assert.equal(sent.length, 1, '只发给启用的那台');
+    assert.equal(sent[0]?.endpoint, active.endpoint);
   });
 });
 

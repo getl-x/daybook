@@ -352,6 +352,8 @@ describe('审查修复：调度器韧性', () => {
           p256dh: 'k',
           auth: 'a',
           userAgent: 'test',
+          label: null,
+          platform: null,
           disabledAt: null,
           createdAt: AT,
           failureCount: 0,

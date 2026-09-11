@@ -12,9 +12,11 @@ import {
   fetchSettings,
   fetchTimezones,
   patchSettings,
+  patchSubscription,
   type NotificationStatus,
   type Session,
   type SettingsView,
+  type SubscriptionDevice,
 } from '../lib/api.ts';
 import { syncNativeSchedules } from '../lib/notifications/native.ts';
 import { toReminderSettings } from '../lib/notifications/plan.ts';
@@ -27,6 +29,12 @@ interface Props {
   onLogout(): void;
 }
 
+/** 平台 → 中文小标签（手机 / 电脑 / 其他） */
+const PLATFORM_LABELS: Record<string, string> = { 'ios-pwa': '手机', android: '手机', web: '电脑' };
+function platformLabel(platform: string | null): string {
+  return (platform ? PLATFORM_LABELS[platform] : undefined) ?? '其他';
+}
+
 /** 设置页：提醒时间与开关、时区/日界、通知权限与推送订阅。 */
 export function SettingsPage({ session, onLogout }: Props) {
   const [settings, setSettings] = useState<SettingsView | null>(null);
@@ -36,6 +44,7 @@ export function SettingsPage({ session, onLogout }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletePassword, setDeletePassword] = useState('');
   const native = isNativeShell();
   const [serverDraft, setServerDraft] = useState(() => serverBase());
@@ -104,6 +113,42 @@ export function SettingsPage({ session, onLogout }: Props) {
       setError(caught instanceof Error ? caught.message : '取消失败');
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** 单独启用/停用某台设备：先乐观更新 UI，失败则回滚并提示，成功以服务端返回为准。 */
+  async function toggleDevice(subscription: SubscriptionDevice, enabled: boolean): Promise<void> {
+    setError(null);
+    setTogglingId(subscription.id);
+    const applyEnabled = (id: string, value: boolean): void => {
+      setStatus((current) =>
+        current
+          ? {
+              ...current,
+              subscriptions: current.subscriptions.map((item) =>
+                item.id === id ? { ...item, enabled: value } : item,
+              ),
+            }
+          : current,
+      );
+    };
+
+    applyEnabled(subscription.id, enabled); // 乐观更新
+    try {
+      const updated = await patchSubscription(subscription.id, enabled);
+      setStatus((current) =>
+        current
+          ? {
+              ...current,
+              subscriptions: current.subscriptions.map((item) => (item.id === updated.id ? updated : item)),
+            }
+          : current,
+      );
+    } catch (caught) {
+      applyEnabled(subscription.id, subscription.enabled); // 回滚
+      setError(caught instanceof Error ? caught.message : '切换失败');
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -301,29 +346,63 @@ export function SettingsPage({ session, onLogout }: Props) {
               </Banner>
             ) : null}
 
-            {status && status.subscriptions.length > 0 ? (
-              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                {status.subscriptions.map((subscription, index) => (
-                  <li key={subscription.id} className="flex items-center justify-between gap-3 py-2">
-                    <span className="text-slate-600 dark:text-slate-300">
-                      设备 {index + 1}
-                      <span className="ml-2 text-xs text-slate-400">
-                        {subscription.created_at.slice(0, 10)}
-                        {subscription.failure_count > 0 ? ` · 失败 ${subscription.failure_count} 次` : ''}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">设备列表</p>
+              {status && status.subscriptions.length === 0 ? (
+                <p className="text-xs text-slate-400">
+                  还没有设备订阅提醒；在这台设备的浏览器里点上面的「开启每日提醒」按钮。
+                </p>
+              ) : null}
+              {status && status.subscriptions.length > 0 ? (
+                <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                  {status.subscriptions.map((subscription) => (
+                    <li key={subscription.id} className="flex items-center justify-between gap-3 py-2">
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`truncate ${
+                              subscription.enabled
+                                ? 'text-slate-700 dark:text-slate-200'
+                                : 'text-slate-400 line-through dark:text-slate-500'
+                            }`}
+                          >
+                            {subscription.label || '未命名设备'}
+                          </span>
+                          <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                            {platformLabel(subscription.platform)}
+                          </span>
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-400">
+                          {subscription.created_at.slice(0, 10)}
+                          {subscription.failure_count > 0 ? ` · 失败 ${subscription.failure_count} 次` : ''}
+                          {subscription.enabled ? '' : ' · 已停用'}
+                        </span>
                       </span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void removeSubscription(subscription.id)}
-                      disabled={busy}
-                      className="text-xs text-red-600 underline disabled:opacity-50 dark:text-red-400"
-                    >
-                      关闭
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+                      <span className="flex shrink-0 items-center gap-3">
+                        <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                          <input
+                            type="checkbox"
+                            checked={subscription.enabled}
+                            disabled={busy || togglingId === subscription.id}
+                            onChange={(event) => void toggleDevice(subscription, event.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          {subscription.enabled ? '启用' : '停用'}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => void removeSubscription(subscription.id)}
+                          disabled={busy}
+                          className="text-xs text-red-600 underline disabled:opacity-50 dark:text-red-400"
+                        >
+                          删除
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
 
             {status && status.recent_deliveries.length > 0 ? (
               <div className="space-y-1 text-xs text-slate-400">

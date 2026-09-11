@@ -394,6 +394,17 @@ export function createFakeStore(): FakeStore {
       );
     },
 
+    async listAllPushSubscriptions(userId) {
+      return [...pushSubscriptions.values()].filter((subscription) => subscription.userId === userId);
+    },
+
+    async setSubscriptionEnabled(userId, id, enabled) {
+      const existing = pushSubscriptions.get(id);
+      if (!existing || existing.userId !== userId) return false;
+      pushSubscriptions.set(id, { ...existing, disabledAt: enabled ? null : (existing.disabledAt ?? new Date()) });
+      return true;
+    },
+
     async upsertPushSubscription(userId, input: PushSubscriptionInput) {
       for (const [id, existing] of pushSubscriptions) {
         if (existing.endpoint !== input.endpoint) continue;
@@ -403,6 +414,8 @@ export function createFakeStore(): FakeStore {
           p256dh: input.p256dh,
           auth: input.auth,
           userAgent: input.userAgent ?? null,
+          label: input.label ?? existing.label,
+          platform: input.platform ?? existing.platform,
           disabledAt: null,
           failureCount: 0,
         };
@@ -416,6 +429,8 @@ export function createFakeStore(): FakeStore {
         p256dh: input.p256dh,
         auth: input.auth,
         userAgent: input.userAgent ?? null,
+        label: input.label ?? null,
+        platform: input.platform ?? null,
         disabledAt: null,
         failureCount: 0,
         createdAt: new Date(),

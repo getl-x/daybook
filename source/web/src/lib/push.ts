@@ -20,6 +20,46 @@ export function pushSupported(): boolean {
   );
 }
 
+export interface DeviceDescription {
+  /** 人类可读的设备名，例：“iPhone · Safari” */
+  label: string;
+  /** 平台：ios-pwa（iPhone/iPad）或 web */
+  platform: 'ios-pwa' | 'web';
+}
+
+const DEVICE_LABEL_MAX = 40;
+
+/**
+ * 按 UA 字符串推断当前设备名与平台（纯函数，方便单测）。
+ * label 尽量拼成“设备 · 浏览器”，拿不准就退回截断的整个 UA；
+ * platform：iPhone/iPad/iPod → ios-pwa，其余 → web。
+ * 不传参时用运行环境的 navigator.userAgent。
+ */
+export function describeCurrentDevice(userAgent?: string): DeviceDescription {
+  const ua = (userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '')) || '';
+  const platform: DeviceDescription['platform'] = /iPhone|iPad|iPod/i.test(ua) ? 'ios-pwa' : 'web';
+
+  let device = '';
+  if (/iPhone/i.test(ua)) device = 'iPhone';
+  else if (/iPad/i.test(ua)) device = 'iPad';
+  else if (/iPod/i.test(ua)) device = 'iPod';
+  else if (/Android/i.test(ua)) device = 'Android';
+  else if (/Windows/i.test(ua)) device = 'Windows';
+  else if (/Macintosh|Mac OS X/i.test(ua)) device = 'Mac';
+  else if (/Linux/i.test(ua)) device = 'Linux';
+
+  let browser = '';
+  if (/Edg(e|iOS)?\//i.test(ua)) browser = 'Edge';
+  else if (/CriOS\//i.test(ua)) browser = 'Chrome';
+  else if (/FxiOS\//i.test(ua)) browser = 'Firefox';
+  else if (/Chrome\//i.test(ua)) browser = 'Chrome';
+  else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+  else if (/Safari\//i.test(ua)) browser = 'Safari';
+
+  const label = device && browser ? `${device} · ${browser}` : (device || browser || ua).slice(0, DEVICE_LABEL_MAX);
+  return { label, platform };
+}
+
 /**
  * VAPID 公钥是 base64url，`applicationServerKey` 要 BufferSource。
  * 返回 `ArrayBuffer` 而不是 `Uint8Array`：后者的泛型参数是 ArrayBufferLike，
@@ -75,6 +115,8 @@ export async function subscribeToPush(vapidPublicKey: string): Promise<PushSubsc
       body: JSON.stringify({
         endpoint: json.endpoint,
         keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+        // 让服务端能把这台设备认出来，并在设置页单独开关
+        ...describeCurrentDevice(),
       }),
     });
     const body = (await response.json()) as { subscription?: { id?: string } };

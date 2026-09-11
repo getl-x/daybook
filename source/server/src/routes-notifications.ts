@@ -8,7 +8,15 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AppStore, AuthContext } from './app.ts';
 import type { Config } from './config.ts';
 import { DiaryError } from './diary.ts';
-import { normalizeLocalTime, type NotificationStore, type ReminderSettings } from './notifications.ts';
+import {
+  isSubscriptionPlatform,
+  normalizeLocalTime,
+  SUBSCRIPTION_LABEL_MAX,
+  SUBSCRIPTION_PLATFORMS,
+  type NotificationStore,
+  type PushSubscriptionRecord,
+  type ReminderSettings,
+} from './notifications.ts';
 import { rescheduleUser } from './scheduler.ts';
 import { isValidTimeZone } from '@daybook/shared';
 
@@ -35,6 +43,8 @@ interface SettingsBody {
 interface SubscriptionBody {
   endpoint?: unknown;
   keys?: { p256dh?: unknown; auth?: unknown };
+  label?: unknown;
+  platform?: unknown;
 }
 
 const TIMEZONE_PATTERN = /^[A-Za-z_]+\/[A-Za-z_+\-0-9]+$/;
@@ -67,13 +77,25 @@ function toSettingsView(settings: ReminderSettings, config: Config, subscription
 export function registerNotificationRoutes(app: FastifyInstance, deps: NotificationRouteDeps): void {
   const { store, config, now, authenticate } = deps;
 
+  /** 设备订阅的对外视图：enabled 由 disabled_at 派生（复用既有启停列，不多加一列） */
+  function toSubscriptionView(subscription: PushSubscriptionRecord) {
+    return {
+      id: subscription.id,
+      label: subscription.label,
+      platform: subscription.platform,
+      enabled: subscription.disabledAt === null,
+      created_at: subscription.createdAt.toISOString(),
+      failure_count: subscription.failureCount,
+    };
+  }
+
   /* ------------------------------- 设置 ------------------------------- */
 
   app.get('/v1/settings', async (request) => {
     const auth = await authenticate(request);
     // 顺手自愈：老用户可能还没有排程行（提醒功能是后加的），读设置时补上
     const settings = await rescheduleUser(store, auth.userId, now());
-    const subscriptions = await store.listPushSubscriptions(auth.userId);
+    const subscriptions = await store.listAllPushSubscriptions(auth.userId);
     return toSettingsView(settings, config, subscriptions.length);
   });
 
@@ -181,7 +203,7 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
     const settings = await store.updateReminderSettings(auth.userId, patch);
     if (touchesSchedule) await rescheduleUser(store, auth.userId, now());
 
-    const subscriptions = await store.listPushSubscriptions(auth.userId);
+    const subscriptions = await store.listAllPushSubscriptions(auth.userId);
     return toSettingsView(settings, config, subscriptions.length);
   });
 
@@ -204,15 +226,79 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
       return { error: 'invalid_field', message: 'keys.p256dh 与 keys.auth 必填' };
     }
 
+    // 设备名：可选；超长截断到 40 字符，空白视为未提供
+    let label: string | null = null;
+    if (body.label !== undefined && body.label !== null) {
+      if (typeof body.label !== 'string') {
+        reply.code(400);
+        return { error: 'invalid_field', message: 'label 必须是字符串' };
+      }
+      const trimmed = body.label.trim();
+      label = trimmed === '' ? null : trimmed.slice(0, SUBSCRIPTION_LABEL_MAX);
+    }
+    // 平台：可选；只接受白名单，非法就 400
+    let platform: string | null = null;
+    if (body.platform !== undefined && body.platform !== null) {
+      if (!isSubscriptionPlatform(body.platform)) {
+        reply.code(400);
+        return {
+          error: 'invalid_field',
+          message: `platform 必须是 ${SUBSCRIPTION_PLATFORMS.join(' / ')} 之一`,
+        };
+      }
+      platform = body.platform;
+    }
+
     const userAgent = typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'].slice(0, 300) : null;
-    const subscription = await store.upsertPushSubscription(auth.userId, { endpoint, p256dh, auth: authKey, userAgent });
+    const subscription = await store.upsertPushSubscription(auth.userId, {
+      endpoint,
+      p256dh,
+      auth: authKey,
+      userAgent,
+      label,
+      platform,
+    });
 
     const settings = await store.getReminderSettings(auth.userId);
     // 第一次订阅时排程可能还没建（例如用户从没打开过设置页）→ 顺手补上
     await rescheduleUser(store, auth.userId, now());
 
-    const subscriptions = await store.listPushSubscriptions(auth.userId);
-    return { subscription: { id: subscription.id, endpoint: subscription.endpoint }, settings: toSettingsView(settings, config, subscriptions.length) };
+    const subscriptions = await store.listAllPushSubscriptions(auth.userId);
+    return {
+      subscription: toSubscriptionView(subscription),
+      settings: toSettingsView(settings, config, subscriptions.length),
+    };
+  });
+
+  /** 设备列表：每条含 label / platform / enabled，供设置页展示与单独开关 */
+  app.get('/v1/notifications/subscriptions', async (request) => {
+    const auth = await authenticate(request);
+    const subscriptions = await store.listAllPushSubscriptions(auth.userId);
+    return { subscriptions: subscriptions.map(toSubscriptionView) };
+  });
+
+  /** 单独启用/停用某台设备（幂等）；不属于当前用户或不存在 → 404 */
+  app.patch<{ Params: { id: string } }>('/v1/notifications/subscriptions/:id', async (request, reply) => {
+    const auth = await authenticate(request);
+    const body = (request.body ?? {}) as { enabled?: unknown };
+    if (typeof body.enabled !== 'boolean') {
+      reply.code(400);
+      return { error: 'invalid_field', message: 'enabled 必须是布尔值' };
+    }
+
+    const updated = await store.setSubscriptionEnabled(auth.userId, request.params.id, body.enabled);
+    if (!updated) {
+      reply.code(404);
+      return { error: 'not_found' };
+    }
+
+    const subscriptions = await store.listAllPushSubscriptions(auth.userId);
+    const subscription = subscriptions.find((item) => item.id === request.params.id);
+    if (!subscription) {
+      reply.code(404);
+      return { error: 'not_found' };
+    }
+    return { subscription: toSubscriptionView(subscription) };
   });
 
   app.delete<{ Params: { id: string } }>('/v1/notifications/subscriptions/:id', async (request, reply) => {
@@ -230,7 +316,7 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
   app.get('/v1/notifications/status', async (request) => {
     const auth = await authenticate(request);
     const [subscriptions, deliveries, settings] = await Promise.all([
-      store.listPushSubscriptions(auth.userId),
+      store.listAllPushSubscriptions(auth.userId),
       store.listReminderDeliveries(auth.userId, 10),
       store.getReminderSettings(auth.userId),
     ]);
@@ -238,11 +324,7 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: Notificat
     return {
       vapid_public_key: config.vapid?.publicKey ?? null,
       push_configured: config.vapid !== null,
-      subscriptions: subscriptions.map((subscription) => ({
-        id: subscription.id,
-        created_at: subscription.createdAt.toISOString(),
-        failure_count: subscription.failureCount,
-      })),
+      subscriptions: subscriptions.map(toSubscriptionView),
       recent_deliveries: deliveries.map((delivery) => ({
         local_date: delivery.localDate,
         kind: delivery.kind,

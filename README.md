@@ -12,6 +12,7 @@ A private, self-hosted guided journal: **review yesterday and plan today in the 
 - **Field-level autosave** with an explicit conflict notice when a write overwrites something newer.
 - **Offline drafts** kept in IndexedDB and replayed once you're back online.
 - **Daily Web Push reminders** (VAPID) with per-user timezone and day boundary (the journal day starts at 04:00 local); **quiet hours** defer reminders inside a window to its end (skip for the day if too late). VAPID keys are auto-generated — nothing to configure.
+- **Multi-device**: the settings page lists every device subscribed to reminders (name, platform, recent failures) with a per-device on/off switch — mute one device without touching the others.
 - **Installable PWA** — add to home screen; Web Push works on iOS 16.4+ too.
 - **Optional Android APK** (a Capacitor shell); you enter your server address on first launch.
 - **Registration is disabled**; accounts are created with a CLI.

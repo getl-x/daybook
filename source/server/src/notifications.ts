@@ -16,6 +16,17 @@ import type { QuietHours } from './quiet-hours.ts';
 export type ReminderKind = 'morning' | 'evening';
 export const REMINDER_KINDS: readonly ReminderKind[] = ['morning', 'evening'];
 
+/** 订阅平台白名单：客户端用 describeCurrentDevice() 推断（web / ios-pwa / android） */
+export const SUBSCRIPTION_PLATFORMS = ['web', 'ios-pwa', 'android'] as const;
+export type SubscriptionPlatform = (typeof SUBSCRIPTION_PLATFORMS)[number];
+
+/** 设备名最长长度（超长截断，避免脏数据把列表撑爆） */
+export const SUBSCRIPTION_LABEL_MAX = 40;
+
+export function isSubscriptionPlatform(value: unknown): value is SubscriptionPlatform {
+  return typeof value === 'string' && (SUBSCRIPTION_PLATFORMS as readonly string[]).includes(value);
+}
+
 export interface ReminderSettings extends ServerSettings {
   morningReminderEnabled: boolean;
   morningReminderTime: string;
@@ -33,6 +44,10 @@ export interface PushSubscriptionRecord {
   auth: string;
   userAgent: string | null;
   disabledAt: Date | null;
+  /** 设备名（客户端按 UA 推断，可空） */
+  label: string | null;
+  /** 平台：web / ios-pwa / android（可空） */
+  platform: string | null;
   failureCount: number;
   createdAt: Date;
 }
@@ -42,6 +57,8 @@ export interface PushSubscriptionInput {
   p256dh: string;
   auth: string;
   userAgent?: string | null;
+  label?: string | null;
+  platform?: string | null;
 }
 
 export type DeliveryStatus = 'pending' | 'sent' | 'failed' | 'skipped';
@@ -181,8 +198,13 @@ export interface NotificationStore {
     { localDate: ISODate; kind: ReminderKind; status: DeliveryStatus; attempts: number; lastError: string | null }[]
   >;
 
+  /** 排程取订阅用：只返回启用的（disabled_at IS NULL） */
   listPushSubscriptions(userId: string): Promise<PushSubscriptionRecord[]>;
+  /** 设置页设备列表用：返回全部（含已停用），交由界面显示 enabled 状态 */
+  listAllPushSubscriptions(userId: string): Promise<PushSubscriptionRecord[]>;
   upsertPushSubscription(userId: string, input: PushSubscriptionInput): Promise<PushSubscriptionRecord>;
+  /** 启用/停用某条订阅（复用 disabled_at）；true = 属于本人且更新成功，false = 不存在或不属于本人 */
+  setSubscriptionEnabled(userId: string, id: string, enabled: boolean): Promise<boolean>;
   deletePushSubscription(userId: string, id: string): Promise<boolean>;
   /** 发送结果回写：sent 清计数；gone 直接禁用；failed 累计到阈值后禁用 */
   recordPushResult(id: string, result: 'sent' | 'failed' | 'gone', at: Date): Promise<void>;
