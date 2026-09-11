@@ -32,16 +32,21 @@ BACKUP_DIR=/mnt/backup/daybook KEEP_DAYS=30 bash deploy/backup.sh
 
 ## 10. 升级
 
+用预构建镜像（推荐，见部署手册第 9 节）：
+
 ```bash
 cd /opt/daybook
-git pull                                   # 或 rsync 覆盖代码（别覆盖 .env）
-docker compose build
-docker compose up -d                       # 迁移自动跑，失败会拒绝启动
+git pull                                   # 更新 compose.yml 等编排（别覆盖 .env）
+docker pull ghcr.io/getl-x/daybook:<新版本>
+DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:<新版本> docker compose up -d --no-build   # 用预构建镜像，不在本机重建
 curl -s http://127.0.0.1:8090/healthz
-docker compose logs app --tail 50
+docker compose logs app --tail 50          # 迁移自动跑，失败会拒绝启动
 ```
 
-回滚：`git checkout <上一个 tag> && docker compose build && docker compose up -d`（数据库迁移是**只加不改**的风格，回滚一般安全；涉及删列的迁移要谨慎）。
+> `--no-build` 不能省：`compose.yml` 里有 `build: .`，不加这个参数会尝试在本机重新构建。
+> 要从本地源码构建时才用：`docker compose build && docker compose up -d`。
+
+回滚：把 `DAYBOOK_IMAGE` 改回上一个版本再 `docker compose up -d --no-build` 即可（只换 app 容器，数据库卷 `pgdata` 保留；迁移是**只加不改**的风格，回滚一般安全，涉及删列的迁移要谨慎）。用本地构建的则 `git checkout <上一个 tag> && docker compose build && docker compose up -d`。
 
 > **发版后第一次打开可能还是旧版**：前端的 Service Worker 是「缓存优先 + 后台更新」，所以旧页面会先用缓存渲染、同时在后台拉新版本，**再打开一次**就是新版（静态资源按内容哈希命名，不会新旧混用）。急着看新版就硬刷新（Ctrl/Cmd+Shift+R）或用无痕窗口。
 > 这一点在验证阶段真实踩到过：无头浏览器复验某个前端修复时，第一次跑拿到的是 SW 缓存里的旧包。
@@ -92,7 +97,7 @@ rm keystore.b64                            # 别把 base64 文件留在本地
 - 四个 secret 缺任意一个，`android-release.yml` 就退化成 **debug 签名包**：能装能测，但密钥是公开的调试密钥，**不能当正式版升级**（换正式包要卸载重装）。
 - 仓库里只有 `source/web/android/keystore.properties.example`；真实的 `.jks` 与 `keystore.properties` 都不进仓库（`.gitignore` 已排除）。
 
-**变量 + secret（推 Docker Hub 用）** —— 让 `docker-publish.yml` 把镜像**同时**推到 [Docker Hub](https://hub.docker.com/) 的 `docker.io/getl/daybook`（与 `ghcr.io/getl-x/daybook` 同一次构建、同名标签：`0.1.0` / `0.1` / `latest` / `sha-xxxxx`）。两处字段都在同一个 **Settings → Secrets and variables → Actions** 页面里，和上面 Android 签名那些并列：
+**变量 + secret（推 Docker Hub 用）** —— 让 `docker-publish.yml` 把镜像**同时**推到 [Docker Hub](https://hub.docker.com/) 的 `docker.io/getl/daybook`（与 `ghcr.io/getl-x/daybook` 同一次构建、同名标签：`0.1.1` / `0.1` / `latest` / `sha-xxxxx`）。两处字段都在同一个 **Settings → Secrets and variables → Actions** 页面里，和上面 Android 签名那些并列：
 
 | 类型 | 名称 | 值 |
 | --- | --- | --- |
@@ -111,7 +116,7 @@ gh secret set DOCKERHUB_TOKEN -R getl-x/daybook
 - `docker.io/getl/daybook` 这个仓库**不用手动建**：首次 push 会自动创建（**默认 public**，和 `getl/lastdone` 一样）。
 - 想 private：先在 Hub 上手动建一个 private 仓库（免费账号只能 1 个 private），那样 VPS 上要先 `docker login` 才能拉。
 - 两个字段**缺任一**，发布流程**不会挂**：只推 GHCR，并在 job summary 里标注一行说明。
-- 验证：`docker manifest inspect docker.io/getl/daybook:0.1.0`（public 包可匿名），或 `docker pull getl/daybook:0.1.0`。Docker Hub 对匿名拉取有频率限制（个人使用足够）；两个仓库内容完全一致。
+- 验证：`docker manifest inspect docker.io/getl/daybook:0.1.1`（public 包可匿名），或 `docker pull getl/daybook:0.1.1`。Docker Hub 对匿名拉取有频率限制（个人使用足够）；两个仓库内容完全一致。
 
 ---
 
@@ -163,7 +168,7 @@ docker compose logs app | grep "提醒 tick 完成"
 - [ ] `.env` 权限 600，且不在任何仓库/备份快照里被提交（`.gitignore` 已排除）。
 - [ ] 备份任务真的在跑（看 `/var/log/daybook-backup.log` 与备份目录大小）。
 - [ ] `docker compose logs app | grep -c '"error"'` 平时应接近 0。
-- [ ] 系统与基础镜像定期更新：`docker compose build --pull`。
+- [ ] 系统与基础镜像定期更新：应用镜像走 `docker compose pull`；从源码构建时才 `docker compose build --pull`。
 
 ---
 

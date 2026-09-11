@@ -89,7 +89,7 @@ DAYBOOK_IMAGE=daybook:dev docker compose up -d   # 或 docker build -t daybook:d
 | workflow | 触发 | 产物 |
 | --- | --- | --- |
 | `ci.yml` | push / PR 到 `main` | typecheck（server + web）+ 全部用例 + 前端构建（只验证，不出产物） |
-| `docker-publish.yml` | 推 `v*` 标签（或手动） | 先用 compose + 真 Postgres 跑冒烟（healthz 200 / 缺失资源 404 / 受保护接口 401 / 非 root），通过后把镜像**同时推到两个仓库**：`ghcr.io/getl-x/daybook` 与 `docker.io/getl/daybook`（同一次构建、同名标签：`0.1.0` / `0.1` / `latest` / `sha-xxxxx`） |
+| `docker-publish.yml` | 推 `v*` 标签（或手动） | 先用 compose + 真 Postgres 跑冒烟（healthz 200 / 缺失资源 404 / 受保护接口 401 / 非 root），通过后把镜像**同时推到两个仓库**：`ghcr.io/getl-x/daybook` 与 `docker.io/getl/daybook`（同一次构建、同名标签：`0.1.1` / `0.1` / `latest` / `sha-xxxxx`） |
 | `android-release.yml` | 推 `v*` 标签（或手动） | 构建前端 → `cap sync` → gradle 打包 → 把 `daybook-<版本>-android-<release\|debug>.apk` 与 `.sha256` 附到 GitHub Release，同时上传 artifact |
 
 > 推 Docker Hub 需要**一个变量 + 一个 secret**：变量 `DOCKERHUB_USERNAME`（= `getl`）+ secret `DOCKERHUB_TOKEN`（Docker Hub 的 Personal access token）。两个都配全才会推 Docker Hub；缺任一就只推 GHCR，并在 job summary 里标注，**不会让流程失败**。配法见 [`docs/zh-CN/operations.md`](docs/zh-CN/operations.md) 的「配一次：GitHub 上的 secrets 与变量」。
@@ -97,9 +97,12 @@ DAYBOOK_IMAGE=daybook:dev docker compose up -d   # 或 docker build -t daybook:d
 **拉已发布的镜像**（public 仓库的包可直接拉，无需登录）：
 
 ```bash
-docker pull ghcr.io/getl-x/daybook:0.1.0
-DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.0 docker compose up -d
+docker pull ghcr.io/getl-x/daybook:0.1.1
+docker pull getl/daybook:0.1.1                       # 或从 Docker Hub 拉（内容一致）
+DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.1 docker compose up -d --no-build
 ```
+
+> `--no-build` 不能省：`compose.yml` 里有 `build: .`；用已发布镜像时加它，避免在本机重新构建。版本号务必**手动指定**（别用 `latest`，它会被下次发布覆盖、不好回溯）。
 
 **装 Android APK**：到仓库的 Releases 页下载 `.apk`（可选核对 `.sha256`）→ 手机允许「未知来源安装」→ 安装后用账号口令登录。APK 里已内置前端资源（离线能打开壳），后端地址在构建时由仓库变量 `DAYBOOK_SERVER_URL` 注入，所以**必须配一个 HTTPS 后端**才能连上。
 
