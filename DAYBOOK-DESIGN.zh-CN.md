@@ -52,7 +52,7 @@
 
 ### 1.4 提醒的可靠性口径
 
-**当天送达，不承诺准点。** 文案与验收标准都不写"09:00 准时通知"——Web Push 的送达时间由浏览器与系统策略决定，Android 在省电策略下可能被延迟或合并。（Android APK 的原生本地通知在第二迭代补上，那条路径才接近准点。）
+**当天送达，不承诺准点。** 文案与验收标准都不写"09:00 准时通知"——Web Push 的送达时间由浏览器与系统策略决定，Android 在省电策略下可能被延迟或合并。（Android APK 已实现**本机排**的本地提醒，那条路径才接近准点。）
 
 ---
 
@@ -377,7 +377,7 @@ docker compose down && docker compose up -d      # 回滚：把 compose 里的�
 | --- | --- | --- |
 | 桌面 Chrome / Edge / Firefox | 服务端 Web Push | 当天送达，不承诺准点 |
 | Android Chrome（含 PWA 安装） | 服务端 Web Push | 同上；系统省电策略可能延迟或合并 |
-| Android APK（第二迭代） | **原生本地定时通知** + 服务端 Web Push 兜底 | 接近准点，离线也可用 |
+| Android APK | **原生本地定时通知**（本机排、非精确闹钟、不用 FCM） | 接近准点，离线也可用 |
 | macOS Safari | 服务端 Web Push（需系统支持版本） | 当天送达，不承诺准点 |
 | iOS 主屏 PWA | 服务端 Web Push（**必须先"添加到主屏幕"并在 App 内授权**） | 同上 |
 | iOS Safari 标签页 | 不支持 | 引导页提示"添加到主屏幕" |
@@ -452,11 +452,11 @@ Manifest（`display: standalone`）+ Service Worker（应用壳与最近日记�
 - **后端地址默认不写死**：原生壳首次启动让用户填服务器地址（存 localStorage，见 `source/web/src/lib/server.ts`）；可选地用 `VITE_DAYBOOK_SERVER_URL`（由仓库变量 `DAYBOOK_SERVER_URL` 注入）预设默认值。WebView 的源是 `https://localhost`，所以必须用绝对地址；
 - **服务端 CORS**：默认放行 `https://localhost` 与 `capacitor://localhost`，可用环境变量 `CORS_ORIGINS`（逗号分隔）覆盖；不开 credentials，令牌仍走 `Authorization` 头；
 - **CI 出包**：`.github/workflows/android-release.yml` 打 `v*` 标签 → 构建前端 + `cap sync` + gradle 打包 → 把 `daybook-<版本>-android-<release|debug>.apk` 与 `.sha256` 附到 GitHub Release；
-- **签名**：用你现有的 `.jks`（密钥文件放**仓库外**，仓库里只放 `source/web/android/keystore.properties.example`）；配了 secrets 出正式包，**没配就自动退化成 debug 签名包**（能装能测，但密钥是公开的调试密钥，不能当正式版升级）。命令见 `android-release.yml` 与运维手册。
+- **签名**：用你现有的 `.jks`（密钥文件放**仓库外**，仓库里只放 `source/web/android/keystore.properties.example`）；配了 secrets 出正式包，**没配就自动退化成 debug 签名包**（能装能测，但密钥是公开的调试密钥，不能当正式版升级）。命令见 `android-release.yml` 与运维手册；
+- **本地定时提醒（非 FCM 的本地排程）**：APK 用 `@capacitor/local-notifications` 在本机排未来 90 天的**非精确**本地通知（`isExactNotification: false` → 不申请精确闹钟权限、不用 Google 服务 / FCM），登录后与回到前台时按用户时区 / 日界重新登记（排程逻辑与后端 Web Push 共用 `@daybook/shared` 的时区算法，见 `source/web/src/lib/notifications/`）；浏览器里的 PWA 不受影响，仍走服务端 Web Push；
 
 **仍留第二迭代**：
 
-- **原生本地通知**：`@capacitor/local-notifications` 登记每天两条提醒（`allowWhileIdle`），在登录、改提醒时间、设备重启、应用升级后**重新登记**；Android 12+ 的精确闹钟权限需要引导授权，未授权时是"大致时间"。当前 APK **没有提醒** —— Web Push 在 Capacitor 的 WebView 里用不了；
 - **应用图标**：仍是 Capacitor 默认图标；
 - **iOS**：未做。
 

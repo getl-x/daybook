@@ -24,6 +24,14 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
     webContentsDebuggingEnabled: false,
   },
+  plugins: {
+    LocalNotifications: {
+      // 状态栏小图标：白色不透明图形 + 透明背景（由 source/scripts/make-notification-icon.mjs 生成）。
+      smallIcon: "ic_stat_daybook",
+      // 通知强调色（与前端主色 slate-900 一致）。
+      iconColor: "#0f172a",
+    },
+  },
 };
 
 export default config;

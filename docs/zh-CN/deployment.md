@@ -372,7 +372,7 @@ DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.1 docker compose up -d --no-build
 3. 打开 APK 安装 → 启动 → 用账号口令登录。
 4. **服务器地址不写死了**：APK **默认不绑任何域名**，首次启动会要求填服务器地址（必须 `https://`；WebView 的源是 `https://localhost`，所以只认绝对地址，见 `androidScheme: https`）。自建者如果想给自己发的包预设默认地址，可选地在仓库变量里设 `DAYBOOK_SERVER_URL`（见 operations.md 的「配一次」）；不设也行 —— 用户首次启动自己填，填一次会记住。
 
-> 提醒现状：APK 里 **Web Push 用不了**（Capacitor 的 WebView 不支持），暂时靠「打开应用」看内容；浏览器里把 PWA 加到主屏则 Web Push 照常可用。
+> 提醒现状：APK 在本机**排本地提醒**（非精确闹钟、不用 Google 服务 / FCM；重启手机后需打开一次应用重新登记）；浏览器里把 PWA 加到主屏仍走 Web Push。
 
 ---
 

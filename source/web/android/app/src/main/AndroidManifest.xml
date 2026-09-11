@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -38,4 +39,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 本应用只排「非精确」本地提醒（schedule 时 isExactNotification: false），不需要精确闹钟权限。
+         @capacitor/local-notifications 的库清单里默认带了 SCHEDULE_EXACT_ALARM，这里显式移除，
+         以免系统在 Android 12+ 上要求用户去授予「闹钟和提醒」权限。 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
 </manifest>

@@ -21,6 +21,7 @@ COPY source/server/package.json server/
 COPY source/web/package.json web/
 RUN npm ci --no-audit --no-fund
 
+COPY source/shared ./shared
 COPY source/web ./web
 RUN npm run build -w @daybook/web
 

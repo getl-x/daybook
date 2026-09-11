@@ -62,7 +62,7 @@ docker compose exec -T app sh -c "echo '你的口令' | node server/src/cli/user
 3. 首次启动填写服务器地址（必须 `https://`），填一次会记住。
 
 - APK 已内置前端资源，**默认不绑任何域名**。自己打包时，可以用仓库变量 `DAYBOOK_SERVER_URL` 预设默认地址。
-- APK 里 **Web Push 用不了**（WebView 限制）；浏览器里的 PWA 则照常可用。
+- APK 在本机**排本地提醒**（非精确闹钟、不用 Google 服务 / FCM）；浏览器里的 PWA 仍走 Web Push。重启手机后需打开一次应用才会重新登记。
 
 ## 开发
 

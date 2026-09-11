@@ -1,7 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { loadSession, logout as revokeSession, type Session } from './lib/api.ts';
+import { fetchSettings, loadSession, logout as revokeSession, type Session } from './lib/api.ts';
+import { disposeNativeSyncHooks, registerNativeSyncHooks } from './lib/notifications/native.ts';
+import { toReminderSettings } from './lib/notifications/plan.ts';
 import { useRoute } from './lib/router.ts';
+import { isNativeShell } from './lib/server.ts';
 import { CalendarPage } from './pages/CalendarPage.tsx';
 import { DayDetailPage } from './pages/DayDetailPage.tsx';
 import { InstallGuidePage } from './pages/InstallGuidePage.tsx';
@@ -18,6 +21,20 @@ export function App() {
     setSession(null);
     void revokeSession();
   }, []);
+
+  // 原生壳（APK）里注册本地提醒同步钩子：登录后同步一次，回前台重同步；登出时注销。
+  // 浏览器里 `isNativeShell()` 为 false，这段完全不执行，PWA 行为不受影响。
+  useEffect(() => {
+    if (!session || !isNativeShell()) return;
+    registerNativeSyncHooks(async () => {
+      try {
+        return toReminderSettings(await fetchSettings());
+      } catch {
+        return null;
+      }
+    });
+    return () => disposeNativeSyncHooks();
+  }, [session]);
 
   if (!session) return <LoginPage onLoggedIn={setSession} />;
 

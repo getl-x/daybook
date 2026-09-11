@@ -181,7 +181,8 @@ export function resolveWallTime(
     return new Date(Math.min(...valid.map((candidate) => candidate.getTime())));
   }
   // 跳变：目标墙上时间不存在，candidates[0] 即"顺延一个跳变间隔"之后的结果
-  return candidates[0];
+  // （candidates 恒有两个元素；`!` 只是满足 noUncheckedIndexedAccess，运行时无影响）
+  return candidates[0]!;
 }
 
 /** 同上，入参为 ISODate + 'HH:MM'。 */

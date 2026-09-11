@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { AppShell } from '../components/AppShell.tsx';
+import { NativeReminderCard } from '../components/NativeReminderCard.tsx';
 import { Banner } from '../components/ui.tsx';
 import {
   ApiError,
@@ -15,6 +16,8 @@ import {
   type Session,
   type SettingsView,
 } from '../lib/api.ts';
+import { syncNativeSchedules } from '../lib/notifications/native.ts';
+import { toReminderSettings } from '../lib/notifications/plan.ts';
 import { isNativeShell, isValidServerBase, normalizeServerBase, saveServerBase, serverBase } from '../lib/server.ts';
 import { NOTIFICATION_STATE_LABELS, notificationState, type NotificationState } from '../lib/device.ts';
 import { subscribeToPush, unsubscribeFromPush } from '../lib/push.ts';
@@ -60,8 +63,11 @@ export function SettingsPage({ session, onLogout }: Props) {
     setBusy(true);
     setError(null);
     try {
-      setSettings(await patchSettings(payload));
+      const next = await patchSettings(payload);
+      setSettings(next);
       setNotice('已保存');
+      // 原生壳里改完提醒设置立刻按新设置重排本地通知（浏览器里 native 为 false，不执行）。
+      if (native) void syncNativeSchedules(toReminderSettings(next));
       void reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '保存失败');
@@ -201,6 +207,8 @@ export function SettingsPage({ session, onLogout }: Props) {
               ：推送要经过系统通知服务，可能被延迟或在省电模式下晚一些。
             </p>
           </section>
+
+          <NativeReminderCard settings={settings} />
 
           <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">这台设备的通知</h2>

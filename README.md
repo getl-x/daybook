@@ -62,7 +62,7 @@ Full, copy-pasteable steps live in [`docs/zh-CN/deployment.md`](docs/zh-CN/deplo
 3. On first launch, enter your server address (it must be `https://`); it is remembered after the first time.
 
 - The APK bundles the front-end assets and **binds to no domain by default**. If you build your own APK, you can preset a default via the repository variable `DAYBOOK_SERVER_URL`.
-- **Web Push does not work inside the APK** (a WebView limitation). In a browser PWA it works normally.
+- **In-APK reminders are local notifications scheduled on the device** — inexact (no exact-alarm permission), no Google services / FCM needed; after rebooting the phone, open the app once to re-register them. The browser PWA still uses Web Push as before.
 
 ## Development
 
