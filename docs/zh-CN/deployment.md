@@ -45,9 +45,11 @@ chmod 600 .env
 生成两个随机串（把输出粘进 .env）：
 
 ```bash
-openssl rand -base64 24      # → POSTGRES_PASSWORD（数据库口令，仅 compose 内网用）
+openssl rand -hex 32         # → POSTGRES_PASSWORD（数据库口令，仅 compose 内网用）
 openssl rand -base64 48      # → JWT_SECRET（生产环境必须 ≥ 32 字符，否则拒绝启动）
 ```
+
+> **口令为什么用 hex 而不是 base64**：`POSTGRES_PASSWORD` 会被拼进 `DATABASE_URL`（`postgres://daybook:<口令>@db:5432/daybook`）。hex 只含 `0-9a-f`，不会与 URL 语法冲突；base64 可能含 `/`、`+`，其中 `/` 会直接让连接串解析失败（应用报「迁移失败：Invalid URL」）。**不进 URL 的 `JWT_SECRET` 仍用 `-base64 48`**。
 
 编辑 `nano .env`，**只改这几项**（其余保持默认）：
 
@@ -539,6 +541,26 @@ DAYBOOK_IMAGE=ghcr.io/getl-x/daybook:0.1.1 docker compose up -d --no-build
 - **发版后第一次打开可能还是旧版**：Service Worker 是「缓存优先 + 后台更新」——旧页面先用缓存渲染、同时后台拉新版，**再打开一次**就是新版（静态资源按内容哈希命名，不会新旧混用）。急着看新版就硬刷新（Ctrl/Cmd+Shift+R）或用无痕窗口。
 - **重启自愈**：app 与 db 都设了 `restart: unless-stopped`，机器重启后自动把栈拉起来；每次启动自动跑迁移（幂等）。
 - **改过 `POSTGRES_PASSWORD` 但数据卷是旧口令**：容器会起不来。要么改回原口令，要么清卷重来（先备份！）。
+
+### 容器重启循环：迁移失败：Invalid URL
+
+**含义**：`DATABASE_URL` 已存在但无法被解析成 URL。（若该变量**缺失**，报的会是「缺少必需的环境变量 DATABASE_URL」，可据此区分。）
+
+一行自检（只输出 host，不泄露口令）：
+
+```bash
+docker compose run --rm daybook sh -c 'node -e "const u=process.env.DATABASE_URL||\"\";try{const p=new URL(u);console.log(\"OK host=\"+p.host)}catch(e){console.log(\"BAD: \"+e.message)}"'
+```
+
+> 命令里的 `daybook` 是 app 服务名的占位符——**换成你自己的服务名**。本仓库 `compose.yml` 里的 app 服务名叫 `app`，请写成 `docker compose run --rm app ...`。
+
+三个最常见原因：
+
+1. **口令含 URL 特殊字符**（`/` `@` `:` `#` `?`，base64 口令里尤为常见）→ 改用 `openssl rand -hex 32` 重新生成。
+2. **值被写成带引号**（compose 的 `environment` 列表写法里，引号会算进值本身）→ 去掉引号。
+3. **`@` 后面主机名为空或不是 db 服务名** → 用 `@db:5432`（服务名要与 compose 里一致）。
+
+> 提醒：`POSTGRES_PASSWORD` 与 `DATABASE_URL` 里的口令必须**一致**，否则报的是**认证失败**而不是解析失败；且 Postgres **只在首次初始化**时读取该口令，改了环境变量后若数据卷已存在则不生效（空库可 `docker compose down -v` 重来；⚠️ 有数据时**不要**用 `-v`）。
 
 ---
 
