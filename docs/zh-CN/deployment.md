@@ -321,6 +321,51 @@ networks:
 2. **其他人一律 `external: true`**：daybook（以及 vaultwarden / 其它栈）只写 `external: true` + `name: web`，**绝不**在自己文件里定义 `web` 的 `ipam` / `subnet`。
 3. **不要把新服务加进"网络所有者"那个项目**：要加新业务就**新建一个自己的 compose 项目**、用 `external: true` 挂上 `web`；**不要**把服务塞进拥有网络的那份文件（`/opt/web` 之类）——那会让所有业务共用一份编排、一次手滑全体遭殃。
 
+### 常见误写：两个网络 key 写了同一个 name
+
+在**同一份** `networks:` 里给两个 key 写**同一个 `name`**（下面 `db` 的 `name` 也叫 `web`）：
+
+```yaml
+networks:
+  web:
+    name: web                 # ← 网络 key `web`
+    ipam:
+      config:
+        - subnet: 172.20.2.0/24
+  db:
+    name: web                 # ← 问题行：另一个 key `db` 也写成 name: web
+    ipam:
+      config:
+        - subnet: 172.20.10.0/24   # ← 子网却和上面不一样
+```
+
+**为什么会报 `network web has active endpoints`**：compose 按 `name` 把 `web` 与 `db` 两个 key 都解析成「名叫 `web` 的**同一张**网络」，可两处的 `subnet` 定义不同 → compose 判定「定义变了、得**重建** `web`」→ 重建前要先删掉现有的 `web`（`172.20.2.0/24`）→ 可上面还挂着**别的项目**的容器 → 删不掉 → 整个 `up` 中止。报错行会显示成 `network:<出错的那个 key>`（本例即 `network:db`）——**别被这个 key 名带偏**，它说的就是那张共享的 `web`。
+
+**修正（二选一）**：
+
+- `db` 只给本项目用 → **删掉 `db` 的 `name:`**，让 compose 自动命名成 `<项目名>_db`，与共享的 `web` 彻底分开：
+
+  ```yaml
+  networks:
+    web:
+      name: web
+      ipam:
+        config:
+          - subnet: 172.20.2.0/24
+    db:                        # 不给 name：compose 自动命名 <项目名>_db
+      ipam:
+        config:
+          - subnet: 172.20.10.0/24
+  ```
+
+- 想跨项目共用 `db` 这张网络 → 把它的 `name:` 改成 `name: db`（两个 key 各是独立的网络），并**先**确认 `db` 没被占用：`docker network inspect db`（报 `No such network` 即可放心拿它当新网络名）。
+
+**确认改对了**：两个 key 应解析到**不同**的网络名——
+
+```bash
+docker compose config | grep -A12 '^networks:'
+```
+
 ### 报错「network web has active endpoints」怎么认、怎么修
 
 **症状**：在**创建网络的**那个项目目录里跑 `docker compose up -d`（注意：不是在 daybook 目录），报：
