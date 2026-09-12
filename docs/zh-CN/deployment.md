@@ -267,6 +267,134 @@ sudo certbot renew --dry-run          # 演练一次，确认续期链路通
 
 ---
 
+## 在共享反代网络里部署（多个 compose 项目共用 web 网络）
+
+很多 VPS 上会用一张**公共 bridge 网络**（惯例叫 `web`，比如子网 `172.20.2.0/24`）把反代和各业务串起来：反代、vaultwarden、其它栈都挂在这张网络上，用容器 IP 互访。daybook 要么是它的一员，要么和反代写在**同一份文件**里。下面两条路选一条即可。
+
+### 拓扑一：daybook 单独一个 compose 项目（推荐）
+
+daybook 用自己的 compose 项目跑，只把 `app` 挂到**已存在**的 `web` 网络；`web` 声明为 `external: true`，并**显式写 `name: web`**。改动就这两处：
+
+```yaml
+# daybook 的 compose.yml（/opt/daybook）
+services:
+  app:
+    networks:
+      - default      # 与 db 私网互通（db 不写 networks，默认就只在 default 上）
+      - web          # 再把 app 挂到反代所在的共享网络
+
+networks:
+  web:
+    external: true   # 这个网络已存在：别去创建，更别去删除它
+    name: web        # 明确真实网络名就叫 web
+```
+
+- `external: true` 是关键：compose 知道 `web` **不归本项目所有**，`up` 时不会去建它、`down` 时也**不会试图删它**。
+- **不要**在这里写 `web` 的 `driver` / `ipam` / `subnet`——那是网络所有者的事（见下面「三条规矩」）。
+
+### 拓扑二：和反代写在同一个 compose 文件里（也行）
+
+反代（nginx / caddy）和 daybook 写在**同一份 compose.yml**、共用同一份 `networks:`。这时 `web` **由这份文件创建并拥有**（带子网）：
+
+```yaml
+services:
+  app:   { ... }        # daybook 应用
+  db:    { ... }        # 数据库
+  caddy:                # 反代
+    image: caddy:2
+    ports: ["80:80", "443:443"]
+    networks: [web]
+
+networks:
+  web:                  # 由这份文件创建、也由它负责
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.2.0/24
+```
+
+同一个项目内，反代可以直接用服务名反代：caddy 写 `reverse_proxy app:8090`、nginx 写 `proxy_pass http://app:8090;`。**这种写法可行，但代价是这份文件从此"拥有"了 `web`**：它一旦改错 `networks:`、或对整栈 `down`，都会波及挂在同一网络上的**其它项目**——下一节的报错就是这么来的。
+
+### 三条规矩（贴墙上）
+
+1. **谁创建谁定义 subnet**：`web` 的子网只写在**网络所有者**那一份文件里（`driver: bridge` + `ipam.config.subnet`）。其它任何项目都不要重复声明子网。
+2. **其他人一律 `external: true`**：daybook（以及 vaultwarden / 其它栈）只写 `external: true` + `name: web`，**绝不**在自己文件里定义 `web` 的 `ipam` / `subnet`。
+3. **不要把新服务加进"网络所有者"那个项目**：要加新业务就**新建一个自己的 compose 项目**、用 `external: true` 挂上 `web`；**不要**把服务塞进拥有网络的那份文件（`/opt/web` 之类）——那会让所有业务共用一份编排、一次手滑全体遭殃。
+
+### 报错「network web has active endpoints」怎么认、怎么修
+
+**症状**：在**创建网络的**那个项目目录里跑 `docker compose up -d`（注意：不是在 daybook 目录），报：
+
+```
+✘ network:db  error while removing network: network web has active endpoints
+   (name:"vaultwarden" name:"lastdone" name:"sub-store")
+```
+
+**原因**：那份文件的 `networks:` 段被改动、或整段丢了，compose 于是认为"本项目不再声明 `web`"，就打算**删掉**它；可 `web` 上还挂着别的项目（上例的 vaultwarden / lastdone / sub-store）的容器 → 删不掉 → 整个 `up` 中止。
+
+**先诊断**：
+
+```bash
+# 1. 看当前项目声明了哪些网络（cd 到报错的项目目录后执行）
+docker compose config | grep -A6 '^networks:'
+
+# 2. 看 web 网络的真实子网（修法里要照抄这个值）
+docker network inspect web --format '{{json .IPAM.Config}}'
+
+# 3. 看 web 网络到底是哪个项目创建的（= 网络所有者）
+docker network inspect web --format '{{index .Labels "com.docker.compose.project"}}'
+```
+
+**修法**：把**网络所有者**那份文件里的 `networks:` 段补回来（带 `driver` + `ipam`，子网以第 2 条 inspect 为准）：
+
+```yaml
+# 在网络所有者的 compose.yml（例如 /opt/web）里补回：
+networks:
+  web:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.2.0/24     # ← 用第 2 条 inspect 出来的真实子网
+```
+
+补回后再 `docker compose up -d`，compose 就不会再试图删 `web` 了。
+
+> ⚠️ 两条红线（跨项目共享网络时尤其致命）：
+> - **绝不要**在共享网络的**任何**项目里跑 `docker compose down -v`：`-v` 会连数据卷一起删（daybook 的 `pgdata` 首当其冲），而一个项目 `down` 也可能动到别人的容器。
+> - **不要**用 `docker network prune`：它会清理"没有容器在用"的网络，随时可能把共享网络或别人项目的网络一起端掉。
+
+### nginx 在容器里时，反代目标写容器 IP
+
+反代（nginx / caddy）如果也是 `web` 网络里的一个**容器**，就按 daybook 应用容器的地址反代到它的 8090：
+
+```nginx
+# nginx 容器内，反代到 daybook 应用容器
+location / {
+    proxy_pass http://172.20.2.201:8090;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Authorization     $http_authorization;   # 千万别丢
+}
+```
+
+- **跨 compose 项目**时服务名不互相解析（`app` 只在 daybook 项目内是别名），所以用**容器静态 IP**（示例 `172.20.2.201:8090`）。
+- 想把它钉死，就在 daybook 里给 `app` 指定 `web` 网段内的一个地址（落在子网内、且未被占用）：
+
+```yaml
+services:
+  app:
+    networks:
+      default: {}
+      web:
+        ipv4_address: 172.20.2.201
+```
+
+- 容器反代**不需要**把 8090 发布到宿主机；只有反代跑在**宿主机**上（第 5 节那套）时才用 `127.0.0.1:8090:8090`。
+
+---
+
 ## 6. 防火墙与安全
 
 ```bash
