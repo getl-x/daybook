@@ -73,9 +73,9 @@ type FieldState struct {
 
 // Entry 是"某一天"的完整视图。
 type Entry struct {
-	EntryDate schedule.ISODate    `json:"entryDate"`
-	Exists    bool                `json:"exists"`
-	Version   int                 `json:"version"`
+	EntryDate schedule.ISODate         `json:"entryDate"`
+	Exists    bool                     `json:"exists"`
+	Version   int                      `json:"version"`
 	Fields    map[TextField]FieldState `json:"fields"`
 }
 
@@ -87,8 +87,8 @@ type PatchFieldResult struct {
 
 // PatchResult 是一次 PATCH 的返回。
 type PatchResult struct {
-	EntryDate schedule.ISODate            `json:"entryDate"`
-	Version   int                         `json:"version"`
+	EntryDate schedule.ISODate               `json:"entryDate"`
+	Version   int                            `json:"version"`
 	Fields    map[TextField]PatchFieldResult `json:"fields"`
 }
 
@@ -273,7 +273,7 @@ func NormalizeIncidentInput(id string, content string, occurredAt *time.Time, ta
 }
 
 // IncidentEntryDate 计算突发事情的归属日：按发生时间 + 用户时区 + 日界算
-//（改时间跨日 → 归属日跟着变，计划 §5.4）。
+// （改时间跨日 → 归属日跟着变，计划 §5.4）。
 func IncidentEntryDate(occurredAt time.Time, location *time.Location, dayStartHour int) (schedule.ISODate, error) {
 	return schedule.DiaryDate(occurredAt, location, dayStartHour)
 }

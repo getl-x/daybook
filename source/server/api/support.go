@@ -5,8 +5,8 @@
 package api
 
 import (
-	_ "embed"
 	"database/sql"
+	_ "embed"
 	"errors"
 	"net/http"
 	"strings"
@@ -59,7 +59,7 @@ func (e *failure) Error() string { return e.code }
 //     函数就会继续往下走成功分支——实测会把整张时区表返回给未登录请求。
 //
 // PocketBase 的 ErrorHandler 会检测"响应是否已写出"并直接跳过
-//（router.go 的 ErrorHandler：`if ok, _ := getWritten(resp); ok { return }`），
+// （router.go 的 ErrorHandler：`if ok, _ := getWritten(resp); ok { return }`），
 // 所以这样用不会产生双份响应体。
 func fail(event *core.RequestEvent, status int, code string) error {
 	if err := event.JSON(status, map[string]string{"error": code}); err != nil {
@@ -213,11 +213,11 @@ type settingsJSON struct {
 }
 
 type remindersJSON struct {
-	MorningEnabled    bool   `json:"morning_enabled"`
-	MorningTime       string `json:"morning_time"`
-	EveningEnabled    bool   `json:"evening_enabled"`
-	EveningTime       string `json:"evening_time"`
-	OnlyIfIncomplete  bool   `json:"only_if_incomplete"`
+	MorningEnabled   bool   `json:"morning_enabled"`
+	MorningTime      string `json:"morning_time"`
+	EveningEnabled   bool   `json:"evening_enabled"`
+	EveningTime      string `json:"evening_time"`
+	OnlyIfIncomplete bool   `json:"only_if_incomplete"`
 }
 
 type quietHoursJSON struct {

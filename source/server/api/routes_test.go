@@ -27,44 +27,60 @@ func registerTestRoutes(t testing.TB, app *tests.TestApp, event *core.ServeEvent
 	RegisterRoutes(event, RouteConfig{AppVersion: "test", DatabaseVersion: "test"})
 }
 
-// run 统一给每个场景补两件事：
+// run 统一给每个场景补上路由注册与响应体断言。
+func run(t *testing.T, scenario tests.ApiScenario) {
+	runWith(t, registerTestRoutes, scenario)
+}
+
+// runWith 允许指定额外的注册逻辑（例如静态托管测试要挂前端产物目录）。
+func runWith(
+	t *testing.T,
+	register func(t testing.TB, app *tests.TestApp, event *core.ServeEvent),
+	scenario tests.ApiScenario,
+) {
+	scenario.BeforeTestFunc = register
+	scenario.AfterTestFunc = assertSingleBody
+	scenario.Test(t)
+}
+
+// assertSingleBody 断言响应体**恰好是一个 JSON 值**（或空）。
 //
-//  1. BeforeTestFunc 挂路由——漏掉的话所有场景都会 404，
-//     而失败信息会误导成"路由写错了"。
-//  2. 响应体必须**恰好是一个 JSON 值**的断言。
-//
-// 第 2 条是回归防线。早先 fail() 写出错误响应后返回了 nil，调用方
+// 这是回归防线。早先 fail() 写出错误响应后返回了 nil，调用方
 // `return fail(...)` 因此没有真的返回，处理函数继续走完成功分支，
 // 于是响应体成了 {"error":"unauthorized"}{"timezones":[...]}——
 // 未登录请求拿到了整张时区表。而只做子串匹配的断言完全看不出来。
-func run(t *testing.T, scenario tests.ApiScenario) {
-	scenario.BeforeTestFunc = registerTestRoutes
-	scenario.AfterTestFunc = func(t testing.TB, app *tests.TestApp, res *http.Response) {
-		if res == nil || res.Body == nil {
-			return
-		}
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			t.Fatalf("读取响应体失败：%v", err)
-		}
-		// 读走之后放回去，避免影响 ApiScenario 自己的断言。
-		res.Body = io.NopCloser(bytes.NewReader(body))
-
-		if len(bytes.TrimSpace(body)) == 0 {
-			return
-		}
-
-		decoder := json.NewDecoder(bytes.NewReader(body))
-		var first any
-		if err := decoder.Decode(&first); err != nil {
-			t.Fatalf("响应体不是合法 JSON：%v（原始内容：%s）", err, body)
-		}
-		var extra any
-		if err := decoder.Decode(&extra); err != io.EOF {
-			t.Errorf("响应体里出现了第二段内容（响应被写了不止一次？）：%s", body)
-		}
+func assertSingleBody(t testing.TB, app *tests.TestApp, res *http.Response) {
+	if res == nil || res.Body == nil {
+		return
 	}
-	scenario.Test(t)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatalf("读取响应体失败：%v", err)
+	}
+	// 读走之后放回去，避免影响 ApiScenario 自己的断言。
+	res.Body = io.NopCloser(bytes.NewReader(body))
+
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return
+	}
+
+	// 只对 API 响应做这条检查：静态产物本来就是 HTML/JS，不是 JSON。
+	// 注意这里**不能用 json.Valid 当门槛**——`{"a":1}{"b":2}` 恰恰是非法 JSON，
+	// 用它会正好跳过我想要抓的那种情况。
+	if res.Request == nil || !isAPIPath(res.Request.URL.Path) {
+		return
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	var first any
+	if err := decoder.Decode(&first); err != nil {
+		t.Fatalf("API 响应不是合法 JSON：%v（原始内容：%s）", err, body)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		t.Errorf("API 响应体里出现了第二段内容（响应被写了不止一次？）：%s", body)
+	}
 }
 
 func newApp(t testing.TB) *tests.TestApp {
@@ -116,10 +132,10 @@ func plainAppFactory(t testing.TB) *tests.TestApp { return newApp(t) }
 
 func TestLoginReturnsClientContractShape(t *testing.T) {
 	run(t, tests.ApiScenario{
-		Name:   "登录返回前端约定的字段",
-		Method: http.MethodPost,
-		URL:    "/v1/auth/login",
-		Body:   strings.NewReader(`{"username":"getl","password":"correct-horse-battery"}`),
+		Name:           "登录返回前端约定的字段",
+		Method:         http.MethodPost,
+		URL:            "/v1/auth/login",
+		Body:           strings.NewReader(`{"username":"getl","password":"correct-horse-battery"}`),
 		ExpectedStatus: http.StatusOK,
 		// 前端 sessionFromLoginBody 就地读这几个键，少一个都会把它打回登录页。
 		ExpectedContent: []string{

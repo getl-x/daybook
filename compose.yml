@@ -1,57 +1,36 @@
-# daybook：应用 + 数据库
+# daybook：单容器应用（后端 + 前端产物 + SQLite）
 #
-# 只包含 app 与 db 两个服务——**反代与 TLS 由你自己部署**（nginx / caddy 等），
+# **反代与 TLS 由你自己部署**（nginx / caddy 等），
 # 反代目标：http://127.0.0.1:8090（见 DAYBOOK-DESIGN.zh-CN.md §7.1）。
+#
+# 与 Node 版的差别：不再有独立的 Postgres 服务。PocketBase 用的是内置 SQLite，
+# 数据就是这个卷里的一个文件，备份/迁移都只需处理它。
 #
 # 用法（都在仓库根目录执行）：
 #   cp deploy/daybook.env.example .env && 改里面的值
 #   DAYBOOK_IMAGE=daybook:dev docker compose up -d
 #   curl -s http://127.0.0.1:8090/healthz
+#
+# 首次部署后：浏览器打开 https://你的域名/_/ 建超级管理员，
+# 然后在 users 集合里添加账号（注册是关闭的，账号只能这样加）。
 
 services:
-  db:
-    image: postgres:16-alpine
-    # 小机器（3C/4G）参数
-    command:
-      - postgres
-      - -c
-      - shared_buffers=384MB
-      - -c
-      - work_mem=8MB
-      - -c
-      - max_connections=20
-      - -c
-      - wal_compression=on
-    environment:
-      POSTGRES_DB: daybook
-      POSTGRES_USER: daybook
-      # 没设置就直接报错，不静默用默认口令
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请先在 .env 里设置 POSTGRES_PASSWORD}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U daybook -d daybook"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-    # 注意：不映射任何端口到宿主机，只在 compose 网络内可见
-
   app:
     image: ${DAYBOOK_IMAGE:-daybook:latest}
     build: .
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgres://daybook:${POSTGRES_PASSWORD:?}@db:5432/daybook
-      PORT: "8090"
-      NODE_ENV: production
+      DAYBOOK_ADDR: 0.0.0.0:8090
+      DAYBOOK_DATA_DIR: /app/pb_data
+      DAYBOOK_PUBLIC_DIR: /app/pb_public
     ports:
       # 只绑本机回环：给宿主上的反代用；公网访问不到 8090
       - "127.0.0.1:8090:8090"
-    depends_on:
-      db:
-        condition: service_healthy
+    volumes:
+      # 数据库、上传文件与备份都在这一个卷里。
+      # 换镜像/升级不会动它；备份也只需备份它。
+      - pb_data:/app/pb_data
     restart: unless-stopped
     logging:
       driver: json-file
@@ -60,4 +39,4 @@ services:
         max-file: "3"
 
 volumes:
-  pgdata:
+  pb_data:

@@ -9,7 +9,7 @@ import (
 //
 // 为什么不能用主键：PocketBase 的记录 id 是 15 位的 `[a-z0-9]`，装不下
 // 36 字符的 UUID。而 Node 版的幂等语义依赖"id 由客户端生成、重复提交天然幂等"
-//（见 diary.ts 的 normalizeIncidentInput），所以必须另开一列。
+// （见 diary.ts 的 normalizeIncidentInput），所以必须另开一列。
 func init() {
 	m.Register(func(app core.App) error {
 		collection, err := app.FindCollectionByNameOrId("incidents")
