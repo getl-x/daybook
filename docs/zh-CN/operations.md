@@ -24,9 +24,22 @@ BACKUP_DIR=/mnt/backup/daybook KEEP_DAYS=30 bash deploy/backup.sh
 45 4 * * * cd /opt/daybook && RSYNC_TARGET=user@nas:/volume1/backup/daybook bash deploy/backup.sh >> /var/log/daybook-backup.log 2>&1
 ```
 
-恢复步骤写在脚本头部注释里（`pg_restore` 前先 `docker compose stop app`）。
+> ⚠️ **`deploy/backup.sh` 目前还是 Postgres 版（`docker compose exec db pg_dump …`），而 Go 版已经没有任何 `db` 服务了——这个脚本现在会直接失败。**
+> 上面几行先别依赖，等它改成"停 app → 复制 `pb_data` 卷里的 `data.db`"再启用。
+> 在改好之前，手工备份就是：
+>
+> ```bash
+> docker compose stop app
+> docker run --rm -v daybook_pb_data:/data -v "$PWD/backups:/backup" alpine \
+>   tar czf /backup/daybook-$(date +%Y%m%d-%H%M%S).tgz -C /data .
+> docker compose start app
+> ```
 
-> 备份**不含** `.env`：`JWT_SECRET` 丢了 = 所有人重新登录；VAPID 私钥丢了 = 所有设备重新订阅。请单独安全保存。
+> Go 版只有**一个**数据卷（compose 里的 `pb_data`），里面装着全部要紧的东西：
+> SQLite 数据库（含用户、日记、订阅排程）、令牌签名密钥、以及 **VAPID 私钥**。
+> 所以「备份数据库」= 「备份推送密钥」= 「备份一切」；反过来，卷丢了重建 = 推送密钥
+> 换了一对 + 所有人重新登录，已订阅的设备会开始收 401/403 直到各自被自动禁用。
+> 备份**不含** `.env`（里面只有 `DAYBOOK_*` 这些非机密配置）。
 
 ---
 
@@ -46,7 +59,7 @@ docker compose logs app --tail 50          # 迁移自动跑，失败会拒绝�
 > `--no-build` 不能省：`compose.yml` 里有 `build: .`，不加这个参数会尝试在本机重新构建。
 > 要从本地源码构建时才用：`docker compose build && docker compose up -d`。
 
-回滚：把 `DAYBOOK_IMAGE` 改回上一个版本再 `docker compose up -d --no-build` 即可（只换 app 容器，数据库卷 `pgdata` 保留；迁移是**只加不改**的风格，回滚一般安全，涉及删列的迁移要谨慎）。用本地构建的则 `git checkout <上一个 tag> && docker compose build && docker compose up -d`。
+回滚：把 `DAYBOOK_IMAGE` 改回上一个版本再 `docker compose up -d --no-build` 即可（只换 app 容器，数据卷 `pb_data` 保留；迁移是**只加不改**的风格，回滚一般安全，涉及删列的迁移要谨慎）。用本地构建的则 `git checkout <上一个 tag> && docker compose build && docker compose up -d`。
 
 > **发版后第一次打开可能还是旧版**：前端的 Service Worker 是「缓存优先 + 后台更新」，所以旧页面会先用缓存渲染、同时在后台拉新版本，**再打开一次**就是新版（静态资源按内容哈希命名，不会新旧混用）。急着看新版就硬刷新（Ctrl/Cmd+Shift+R）或用无痕窗口。
 > 这一点在验证阶段真实踩到过：无头浏览器复验某个前端修复时，第一次跑拿到的是 SW 缓存里的旧包。
@@ -64,7 +77,7 @@ git push origin v0.1.1
 
 随后：
 
-- `docker-publish.yml`：先构建镜像、用 compose + 真 Postgres 跑冒烟，通过后推 `ghcr.io/getl-x/daybook:v0.1.1`（带 semver 与 sha 标签，并更新 `latest`）。
+- `docker-publish.yml`：先构建镜像、用 compose 把构建出的镜像真跑一遍（healthz 回显 `DAYBOOK_VERSION`、登录接口 401、静态产物 200、缺失资源 404），通过后推 `ghcr.io/getl-x/daybook:v0.1.1`（带 semver 与 sha 标签，并更新 `latest`）。
 - `android-release.yml`：构建前端 → `cap sync` → 打包 APK → 建 / 更新 GitHub Release，把 `daybook-0.1.1-android-<release|debug>.apk` 与 `.sha256` 附上去，同时上传 artifact。
 
 在 **Actions** 页面看进度（点进对应的 run）；失败了点右上角 **Re-run jobs** 重跑，重跑前先修好对应的问题 —— 例如 `android-release` 缺签名 secret 时会打 `::warning::` 并退化成 debug 包（缺 `DAYBOOK_SERVER_URL` 不再是问题：APK 首次启动会要求填服务器地址）。
@@ -148,11 +161,13 @@ gh secret set DOCKERHUB_TOKEN -R getl-x/daybook
 ```bash
 docker compose ps
 docker compose logs app --tail 100
-docker compose logs db  --tail 100
 ```
-- `ConfigError: JWT_SECRET 太短` → `.env` 里换成长随机串。
-- `MigrationChecksumError` → 迁移文件被改过而库里已记录不同校验和；**不要**手改已应用的迁移，加新文件。
-- 数据库健康检查不过 → 看 `db` 日志；`POSTGRES_PASSWORD` 改过但数据卷还是旧口令时，要么改回原口令、要么清卷重来。
+- 日志里是打不开 `/app/pb_data/data.db` / 建库失败（`permission denied`）→ 挂上去的宿主数据目录属主不对。容器里跑的是 uid 10001（`daybook`），宿主目录要 `chown 10001:10001`。
+- 日志里是迁移报错 → 迁移是**只加不改**的风格：别动已应用的迁移文件，加一个新的。迁移失败会拒绝启动，这是有意的（宁可不起来，也不要半套结构）。
+- 8090 被占 → `ss -ltnp | grep 8090`。
+
+> Go 版只有**一个**容器：数据库是 PocketBase 内置的 SQLite，就是 `pb_data` 卷里的一个文件。
+> 不再有 `db` 服务，也没有 `POSTGRES_PASSWORD` / `JWT_SECRET` / `DATABASE_URL`。
 
 **打不开页面 / 白屏**
 - `curl -sI http://127.0.0.1:8090/` 应返回 200 HTML；404 说明镜像里没有前端产物（构建阶段失败）。
@@ -164,16 +179,19 @@ docker compose logs db  --tail 100
 **收不到提醒**（按顺序查）
 
 ```bash
-# 1) VAPID 配了吗
-docker compose logs app | grep -i vapid          # 不应出现"未配置 VAPID 密钥"
+# 1) VAPID 密钥解析出来了吗（首次启动自动生成并写进 app_settings，不需要手工配 .env）
+docker compose logs app | grep -i "VAPID"
+#   正常会看到"已生成 VAPID 密钥并存入 app_settings"或"使用 app_settings 里已保存的 VAPID 密钥"
 # 2) 这台设备订阅上了吗、最近发过没
-curl -s -H "authorization: Bearer <access token>" https://diary.example.com/v1/notifications/status
-#   看 subscriptions 数量、recent_deliveries 里 status/attempts/last_error
-# 3) 调度器在跑吗
-docker compose logs app | grep "提醒 tick 完成"
+curl -s -H "authorization: Bearer <access token>" https://你的域名/v1/notifications/status
+#   看 push_configured 是否 true、subscriptions 数量、recent_deliveries 里的 status/attempts/last_error
+# 3) 调度器在跑吗（每分钟一次 tick）
+docker compose logs app | grep "排程已推进"
 ```
-- `recent_deliveries` 里 `failed` + `HTTP 410` → 订阅已失效（多半是浏览器清了数据或换了设备）→ 在设置页重新开启提醒。
-- 一直 `没有可用的推送订阅` → 设备侧没订阅成功：iOS 必须是**主屏图标**打开的 PWA；浏览器必须是 HTTPS。
+- `push_configured: false` / `vapid_public_key: null` → 密钥没解析出来，日志里有「解析 VAPID 密钥失败」。重启容器会再试一次。
+- `recent_deliveries` 里 `failed` 且 `last_error` 是 `HTTP 410` → 订阅已失效（浏览器清了数据或换了设备）→ 在设置页重新开启提醒。
+- `last_error` 是 `HTTP 401` / `HTTP 403` → 这条订阅跟当前的 VAPID 密钥不是同一对（多半是数据卷被重建过）。每条提醒每天最多重试 3 次，`failure_count` 累计到 10 才会自动禁用；在那之前日志里会一直有失败记录，去设置页重新订阅即可。
+- 一直提示 `没有可用的推送订阅` → 设备侧没订阅成功：iOS 必须是**主屏图标**打开的 PWA；浏览器必须是 HTTPS。
 - `skipped` → 你当时已经写完了（"仅未完成时提醒"开着）。
 - 都正常但仍收不到 → 手机系统层：通知权限、省电/后台限制、专注模式。
 
@@ -185,10 +203,10 @@ docker compose logs app | grep "提醒 tick 完成"
 
 - [ ] `https://` 能开、`http://` 会跳转；证书自动续期已启用（`systemctl list-timers | grep certbot`）。
 - [ ] 8090 **只**绑在 `127.0.0.1`（`ss -ltnp | grep 8090` 应显示 127.0.0.1），公网直接访问 `IP:8090` 不通。
-- [ ] 5432 没有对外映射（compose 里 db 没有 `ports`）。
+- [ ] `/_/` 的超级管理员口令足够强（它等于数据库的完全控制权），且不是从 `/_/#/pbinstall/...` 那条首次安装链接随手设的临时值。
 - [ ] `.env` 权限 600，且不在任何仓库/备份快照里被提交（`.gitignore` 已排除）。
-- [ ] 备份任务真的在跑（看 `/var/log/daybook-backup.log` 与备份目录大小）。
-- [ ] `docker compose logs app | grep -c '"error"'` 平时应接近 0。
+- [ ] 备份任务真的在跑（**注意：`deploy/backup.sh` 仍是 Postgres 版，见第 9 节的警告**）。
+- [ ] 应用日志里平时不该有报错（`docker compose logs app | tail -100` 扫一眼；Go 版是文本日志，不再是 Node 版的 JSON）。
 - [ ] 系统与基础镜像定期更新：应用镜像走 `docker compose pull`；从源码构建时才 `docker compose build --pull`。
 
 ---
@@ -203,5 +221,5 @@ docker compose down
 docker compose down -v
 
 # 迁移到新机器：老机器上 docker compose down → 打包 /opt/daybook（含 .env）与数据卷目录，
-# 或在新机器上先 up 起空库，再用备份文件 pg_restore。
+# 或在新机器上先起一次空容器建好卷，再把备份恢复进 pb_data 卷（见第 9 节）。
 ```

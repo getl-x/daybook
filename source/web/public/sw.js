@@ -4,7 +4,7 @@
  * 规则（见计划 §9.3）：
  *  - `/v1/*` 与 `/healthz` 一律不缓存、不拦截（日记数据必须实时）；
  *  - 其余 GET 走「缓存优先 + 后台更新」，因此断网也能打开应用壳；
- *  - 触发 Web Push 的部分在阶段 3 接（push / notificationclick 事件）。
+ *  - 两个事件（`push` / `notificationclick`）的实现在下面第 52 行起，与缓存逻辑同处一个 SW。
  */
 const CACHE = 'daybook-shell-v1';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest'];
