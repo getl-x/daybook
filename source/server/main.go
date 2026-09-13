@@ -2,9 +2,9 @@
 //
 // 与 Node 版的关系：对外 HTTP 契约（/v1/…、/healthz）保持不变，因此
 // source/web 里的客户端代码不需要跟着改。变化的是实现：
-//  - Postgres  → PocketBase 内置 SQLite（单文件，部署时不再需要数据库容器）
-//  - 自研认证  → PocketBase auth collection（注册规则显式关闭）
-//  - 账号管理  → PocketBase 管理员控制台 /_/（替代原先只能用的 CLI）
+//   - Postgres  → PocketBase 内置 SQLite（单文件，部署时不再需要数据库容器）
+//   - 自研认证  → PocketBase auth collection（注册规则显式关闭）
+//   - 账号管理  → PocketBase 管理员控制台 /_/（替代原先只能用的 CLI）
 //
 // 设计取舍见 DAYBOOK-DESIGN.zh-CN.md；本文件的注释记录与 Node 版的对应关系。
 package main
