@@ -110,13 +110,12 @@ export function computeNextFire(
 }
 
 /**
- * "仅未完成时提醒" 的判断：早间看【昨天的回顾 + 今天的计划】，晚间看【今天的总结】。
+ * "仅未完成时提醒" 的判断：早间看【今天的计划】，晚间看【今天的总结】。
  * 与今日页进度用的是同一套派生规则（不存 completed_at）。
  */
 export function shouldSkipForCompletion(
   kind: ReminderKind,
   todayEntry: { fields: Record<string, { value: string | null }> } | null,
-  yesterdayEntry: { fields: Record<string, { value: string | null }> } | null,
 ): boolean {
   const has = (entry: { fields: Record<string, { value: string | null }> } | null, field: string): boolean => {
     const value = entry?.fields[field]?.value;
@@ -124,7 +123,7 @@ export function shouldSkipForCompletion(
   };
 
   if (kind === 'morning') {
-    return (has(yesterdayEntry, 'day_events') || has(yesterdayEntry, 'day_meals')) && has(todayEntry, 'day_plan');
+    return has(todayEntry, 'day_plan');
   }
   return has(todayEntry, 'evening_summary');
 }
@@ -134,7 +133,7 @@ export function reminderPayload(kind: ReminderKind): { title: string; body: stri
   return kind === 'morning'
     ? {
         title: '早上好',
-        body: '花 3 分钟回顾昨天，安排今天吧。',
+        body: '想想今天都要做什么，写两句就够了。',
         url: '/#/today',
         tag: 'daybook-morning',
       }

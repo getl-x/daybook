@@ -113,15 +113,15 @@ export interface Progress {
 }
 
 /**
- * 今日页进度：早间 = 昨天的回顾字段已写 **且** 今天的 day_plan 已写；晚间 = 今天的 evening_summary 已写。
- * 涉及两行是刻意的（"昨天回顾"写在昨天那一行），因此这里显式接收两行。
+ * 今日页进度：早间 = 今天的 day_plan 已写；晚间 = 今天的 evening_summary 已写。
+ * 两边的"完成"都只看当天那一行——早间记录里已经没有"昨日回顾"了。
  */
-export function computeProgress(today: DiaryEntry, yesterday: DiaryEntry): Progress {
+export function computeProgress(today: DiaryEntry): Progress {
   const hasText = (state: DiaryFieldState | undefined): boolean =>
     typeof state?.value === 'string' && state.value.trim() !== '';
 
   return {
-    morningDone: (hasText(yesterday.fields.day_events) || hasText(yesterday.fields.day_meals)) && hasText(today.fields.day_plan),
+    morningDone: hasText(today.fields.day_plan),
     eveningDone: hasText(today.fields.evening_summary),
   };
 }

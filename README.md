@@ -1,12 +1,12 @@
 # daybook
 
-A private, self-hosted guided journal: **review yesterday and plan today in the morning → jot things down during the day → summarize in the evening.**
+A private, self-hosted guided journal: **think about today in the morning → jot things down during the day → summarize in the evening.**
 
 [中文说明 →](README.zh-CN.md)
 
 ## Features
 
-- **Guided, fixed fields**: `day_plan` / `day_events` / `day_meals` / `evening_summary`, plus a "yesterday review" entry point.
+- **Guided, fixed fields**: `day_plan` / `day_events` / `day_meals` / `evening_summary`; today's plan and the evening summary live on the today page, `day_events` / `day_meals` are filled in from the calendar or a day's detail view.
 - **Calendar backfill and per-day detail** views.
 - **Incidents** are filed under a day automatically from their timestamp (timezone- and day-boundary-aware).
 - **Field-level autosave** with an explicit conflict notice when a write overwrites something newer.

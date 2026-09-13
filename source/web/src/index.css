@@ -2,6 +2,15 @@
 
 :root {
   color-scheme: light dark;
+
+  /* 全面屏安全区。
+     Android 上 targetSdk 35+ 强制「边到边」：WebView 会一直画到状态栏和手势条下面，
+     所以标题栏必须自己让出这块高度，否则就出现截图里那种「日期被状态栏压住」。
+     Capacitor 原生壳会注入 --safe-area-inset-*（按系统栏实际高度算），
+     浏览器里没有这些变量，退回标准的 env()（iOS 刘海用得上，安卓浏览器为 0）。
+     兜底 0px，所以套在 calc()/max() 里对 PWA 完全没有影响。 */
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
 }
 
 html,

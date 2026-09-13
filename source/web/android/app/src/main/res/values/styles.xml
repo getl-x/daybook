@@ -13,6 +13,13 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+
+        <!-- 全面屏（targetSdk 35+ 强制边到边）：
+             状态栏是透明的、WebView 画到它下面，安全区由前端的 --safe-top 让出来，
+             这里只负责让状态栏图标在浅色页面上看得见（深色页面用 values-night 覆写）；
+             shortEdges 让内容铺满挖孔屏的「刘海」两侧。 -->
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 
 

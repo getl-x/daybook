@@ -490,7 +490,7 @@ export function buildApp({ config, store, now = () => new Date() }: BuildAppOpti
       today: todayEntry,
       yesterday: yesterdayEntry,
       incidents,
-      progress: computeProgress(todayEntry, yesterdayEntry),
+      progress: computeProgress(todayEntry),
     };
   });
 

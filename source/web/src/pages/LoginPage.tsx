@@ -59,7 +59,7 @@ export function LoginPage({ onLoggedIn }: Props) {
       >
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">daybook</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">早上回顾昨天，白天随手记录，晚上总结。</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">早上想想今天要做什么，白天随手记录，晚上总结。</p>
         </div>
 
         {native ? (

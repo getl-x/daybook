@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 
 import type { DiaryFieldName, DiaryFieldState } from '../lib/api.ts';
 import { useAutosave, type SaveState } from '../lib/autosave.ts';
@@ -14,11 +14,18 @@ export interface DiaryFormState {
   savedAt: number | null;
   message: string | null;
   conflicts: DiaryFieldName[];
+  /** 当前输入内容：父组件要把它收成一行摘要时得用本地值，不能只看服务端返回的 */
+  values: Record<DiaryFieldName, string>;
+}
+
+/** 给父组件的显式「保存」按钮用 */
+export interface DiaryFormHandle {
+  flush(): Promise<void>;
 }
 
 interface Props {
   userId: string;
-  /** 这一组字段写进哪一天的记录（昨日回顾写昨天那一行） */
+  /** 这一组字段写进哪一天的记录（今日计划 / 晚间总结都写今天那一行） */
   entryDate: string;
   initialFields: Record<DiaryFieldName, DiaryFieldState>;
   fields: DiaryFieldSpec[];
@@ -26,15 +33,19 @@ interface Props {
   onStateChange?(state: DiaryFormState): void;
   /** 是否在表单底部显示保存状态 */
   showStatus?: boolean;
+  ref?: Ref<DiaryFormHandle>;
 }
 
 /**
  * 一组可编辑字段 + 自动保存 + 冲突提示。
  *
- * 今日页会挂两个实例（昨天那一行 / 今天那一行）；单日详情页挂一个（四个字段都能改）。
+ * 今日页挂两个实例（今日计划 / 晚间总结），单日详情页挂一个（四个字段都能改）。
  */
-export function DiaryForm({ userId, entryDate, initialFields, fields, onStateChange, showStatus = true }: Props) {
+export function DiaryForm({ userId, entryDate, initialFields, fields, onStateChange, showStatus = true, ref }: Props) {
   const autosave = useAutosave({ userId, entryDate, initialFields });
+
+  // 「保存」按钮直接复用自动保存的 flush：没有改动时它自己就返回了
+  useImperativeHandle(ref, () => ({ flush: autosave.flush }), [autosave.flush]);
 
   // 用 ref 存回调：父组件传内联函数也不会引起重复触发
   const callbackRef = useRef(onStateChange);
@@ -46,8 +57,9 @@ export function DiaryForm({ userId, entryDate, initialFields, fields, onStateCha
       savedAt: autosave.savedAt,
       message: autosave.message,
       conflicts: autosave.conflicts,
+      values: autosave.values,
     });
-  }, [autosave.state, autosave.savedAt, autosave.message, autosave.conflicts]);
+  }, [autosave.state, autosave.savedAt, autosave.message, autosave.conflicts, autosave.values]);
 
   return (
     <div className="space-y-4">

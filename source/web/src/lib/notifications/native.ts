@@ -27,7 +27,7 @@ const RESYNC_MIN_INTERVAL_MS = 30_000;
 
 /** 通知文案（语气对齐今日页：口语、简短、不催促）。 */
 const COPY: Record<'morning' | 'evening', { title: string; body: string }> = {
-  morning: { title: '早上好', body: '回顾昨天、安排今天：写两句就够了' },
+  morning: { title: '早上好', body: '想想今天都要做什么：写两句就够了' },
   evening: { title: '晚上好', body: '写一句今天的小结吧' },
 };
 

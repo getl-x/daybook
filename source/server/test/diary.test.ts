@@ -112,27 +112,20 @@ describe('computeProgress：进度是派生的', () => {
     return entry;
   };
 
-  it('早间完成 = 昨天回顾已写 且 今天的计划已写', () => {
-    const today = withFields({ day_plan: '写方案' });
-    const yesterday = withFields({ day_events: '开会' });
-    assert.deepEqual(computeProgress(today, yesterday), { morningDone: true, eveningDone: false });
-
-    // 昨天只写了"吃了什么"也算回顾完成
-    assert.equal(computeProgress(today, withFields({ day_meals: '面' })).morningDone, true);
-    // 缺任意一半都不算完成
-    assert.equal(computeProgress(withFields({}), yesterday).morningDone, false);
-    assert.equal(computeProgress(today, withFields({})).morningDone, false);
+  it('早间完成只看今天的计划写没写', () => {
+    assert.deepEqual(computeProgress(withFields({ day_plan: '写方案' })), { morningDone: true, eveningDone: false });
+    assert.equal(computeProgress(withFields({})).morningDone, false);
+    // 昨天的回顾字段不再参与早间完成判定（早间记录里已经没有"昨日回顾"）
+    assert.equal(computeProgress(withFields({ day_events: '开会' })).morningDone, false);
+    assert.equal(computeProgress(withFields({ day_meals: '面' })).morningDone, false);
   });
 
   it('只有空白字符不算写过', () => {
-    const today = withFields({ day_plan: '   ' });
-    const yesterday = withFields({ day_events: '\n' });
-    assert.deepEqual(computeProgress(today, yesterday), { morningDone: false, eveningDone: false });
+    assert.deepEqual(computeProgress(withFields({ day_plan: '   ' })), { morningDone: false, eveningDone: false });
   });
 
   it('晚间完成只看今天的总结', () => {
-    const today = withFields({ evening_summary: '还行' });
-    assert.equal(computeProgress(today, emptyEntry('2026-09-09')).eveningDone, true);
+    assert.equal(computeProgress(withFields({ evening_summary: '还行' })).eveningDone, true);
   });
 });
 

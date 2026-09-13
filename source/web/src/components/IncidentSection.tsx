@@ -13,10 +13,19 @@ interface Props {
   onChanged(): Promise<void>;
   title?: string;
   emptyHint?: string;
+  /** 今日页用：记录按钮放大成全宽主按钮、正文也大一号，想到什么立刻就能记一条 */
+  prominent?: boolean;
 }
 
 /** 突发事情：时间线 + 记录此刻 / 编辑弹层。今日页与单日详情页共用。 */
-export function IncidentSection({ date, incidents, onChanged, title = '突发事情', emptyHint }: Props) {
+export function IncidentSection({
+  date,
+  incidents,
+  onChanged,
+  title = '突发事情',
+  emptyHint,
+  prominent = false,
+}: Props) {
   const [modal, setModal] = useState<{ incident: Incident | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -49,18 +58,42 @@ export function IncidentSection({ date, incidents, onChanged, title = '突发事
     await onChanged();
   }
 
+  function openNew(): void {
+    setModal({ incident: null });
+  }
+
   return (
     <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-      <header className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">{title}</h2>
+      <header className="flex items-center justify-between gap-3">
+        <h2
+          className={
+            prominent
+              ? 'text-lg font-semibold text-slate-900 dark:text-slate-50'
+              : 'text-base font-semibold text-slate-900 dark:text-slate-50'
+          }
+        >
+          {title}
+        </h2>
+        {prominent ? null : (
+          <button
+            type="button"
+            onClick={openNew}
+            className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          >
+            + 记录此刻
+          </button>
+        )}
+      </header>
+
+      {prominent ? (
         <button
           type="button"
-          onClick={() => setModal({ incident: null })}
-          className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          onClick={openNew}
+          className="mt-3 w-full rounded-xl bg-slate-900 px-4 py-3.5 text-base font-semibold text-white transition hover:bg-slate-800 active:scale-[0.99] dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
         >
-          + 记录此刻
+          ＋ 记录此刻
         </button>
-      </header>
+      ) : null}
 
       {notice ? (
         <div className="mt-3">
@@ -79,12 +112,22 @@ export function IncidentSection({ date, incidents, onChanged, title = '突发事
               <button
                 type="button"
                 onClick={() => setModal({ incident })}
-                className="flex w-full items-start gap-3 rounded-lg px-1 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                className={
+                  prominent
+                    ? 'flex w-full items-start gap-3 rounded-lg px-1 py-3.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                    : 'flex w-full items-start gap-3 rounded-lg px-1 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                }
               >
                 <span className="w-12 shrink-0 pt-0.5 text-xs tabular-nums text-slate-400">
                   {formatTime(incident.occurredAt)}
                 </span>
-                <span className="min-w-0 flex-1 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+                <span
+                  className={
+                    prominent
+                      ? 'min-w-0 flex-1 text-base whitespace-pre-wrap text-slate-700 dark:text-slate-200'
+                      : 'min-w-0 flex-1 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200'
+                  }
+                >
                   {incident.content}
                 </span>
                 {incident.tag ? <TagChip tag={incident.tag} /> : null}

@@ -14,7 +14,6 @@
 import type { AppStore } from './app.ts';
 import {
   computeNextFire,
-  previousDiaryDate,
   reminderLocalDate,
   reminderPayload,
   shouldSkipForCompletion,
@@ -167,8 +166,7 @@ async function processSchedule(
   // 2) 仅未完成时提醒：发送前再查一次内容（和今日页进度同一套派生规则）
   if (settings.notifyOnlyIfIncomplete) {
     const today = await deps.store.getDiaryEntry(userId, localDate);
-    const yesterday = await deps.store.getDiaryEntry(userId, previousDiaryDate(localDate));
-    if (shouldSkipForCompletion(kind, today, yesterday)) {
+    if (shouldSkipForCompletion(kind, today)) {
       await deps.store.finishDelivery(userId, localDate, kind, 'skipped');
       report.skipped += 1;
       await advance(deps, userId, settings, kind, localDate, report, now);

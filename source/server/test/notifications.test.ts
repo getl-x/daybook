@@ -113,28 +113,30 @@ describe('提醒设置与时刻计算（纯逻辑）', () => {
     assert.equal(previousDiaryDate('2026-09-10'), '2026-09-09');
   });
 
-  it('shouldSkipForCompletion：早间要"昨天回顾 + 今天计划"都写了才跳过；晚间只看总结', () => {
+  it('shouldSkipForCompletion：早间只看今天的计划；晚间只看今天的总结', () => {
     const entry = (values: Record<string, string>): { fields: Record<string, { value: string | null }> } => ({
       fields: Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value }])),
     });
 
     const today = entry({ day_plan: '写日记' });
-    const yesterday = entry({ day_events: '开了会' });
-    assert.equal(shouldSkipForCompletion('morning', today, yesterday), true);
-    assert.equal(shouldSkipForCompletion('morning', entry({}), yesterday), false);
-    assert.equal(shouldSkipForCompletion('morning', today, entry({})), false);
-    assert.equal(shouldSkipForCompletion('morning', today, entry({ day_plan: '   ' })), false);
+    assert.equal(shouldSkipForCompletion('morning', today), true);
+    assert.equal(shouldSkipForCompletion('morning', entry({})), false);
+    assert.equal(shouldSkipForCompletion('morning', entry({ day_plan: '   ' })), false);
+    // 只写了昨天的回顾字段，不算今天的计划写完
+    assert.equal(shouldSkipForCompletion('morning', entry({ day_events: '开了会' })), false);
 
-    assert.equal(shouldSkipForCompletion('evening', entry({ evening_summary: '还行' }), null), true);
-    assert.equal(shouldSkipForCompletion('evening', today, null), false);
-    assert.equal(shouldSkipForCompletion('evening', null, null), false);
+    assert.equal(shouldSkipForCompletion('evening', entry({ evening_summary: '还行' })), true);
+    assert.equal(shouldSkipForCompletion('evening', today), false);
+    assert.equal(shouldSkipForCompletion('evening', null), false);
   });
 
   it('提醒文案不含正文，只带引导与深链', () => {
     const morning = reminderPayload('morning');
     assert.equal(morning.url, '/#/today');
     assert.equal(morning.title, '早上好');
-    assert.ok(morning.body.includes('回顾昨天'));
+    // 早间提醒只说"今天"——早间记录里已经没有"昨日回顾"了
+    assert.ok(morning.body.includes('今天'));
+    assert.ok(!morning.body.includes('昨天'));
     const evening = reminderPayload('evening');
     assert.ok(evening.body.includes('总结'));
     assert.notEqual(morning.tag, evening.tag);

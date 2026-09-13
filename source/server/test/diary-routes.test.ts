@@ -131,7 +131,7 @@ describe('GET /v1/diaries/today 与字段级写入', () => {
     await app.close();
   });
 
-  it('写今天的计划 → 只有今天那一行变了；写完昨天的回顾 → 早间才算完成', async () => {
+  it('写今天的计划 → 只有今天那一行变了，早间即完成', async () => {
     const { app, headers } = setup();
 
     const plan = await app.inject({
@@ -149,8 +149,9 @@ describe('GET /v1/diaries/today 与字段级写入', () => {
     assert.equal(view.today.fields.day_plan.value, '写日记核心');
     assert.equal(view.today.exists, true);
     assert.equal(view.yesterday.exists, false, '写今天不该顺带建出昨天那一行');
-    assert.deepEqual(view.progress, { morningDone: false, eveningDone: false }, '昨天回顾还没写');
+    assert.deepEqual(view.progress, { morningDone: true, eveningDone: false }, '早间只看今天的计划');
 
+    // 补写昨天的回顾不再改变今日页的早间完成状态（早间记录里已经没有"昨日回顾"）
     const review = await app.inject({
       method: 'PATCH',
       url: `/v1/diaries/${YESTERDAY}`,

@@ -22,8 +22,10 @@ export function AppShell({ title, subtitle, onLogout, children }: Props) {
   ];
 
   return (
-    <div className="min-h-full bg-slate-50 pb-20 dark:bg-slate-950">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/85 px-4 pt-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85">
+    <div className="min-h-full bg-slate-50 pb-[calc(5rem+var(--safe-bottom))] dark:bg-slate-950">
+      {/* 顶部让出状态栏高度（--safe-top 见 index.css）：原生壳里标题栏不再被状态栏压住，
+          浏览器 / PWA 里这个值恒为 0，和改动前完全一致。 */}
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/85 px-4 pt-[calc(0.75rem+var(--safe-top))] backdrop-blur dark:border-slate-800 dark:bg-slate-900/85">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">{title}</p>
@@ -38,15 +40,16 @@ export function AppShell({ title, subtitle, onLogout, children }: Props) {
           </button>
         </div>
 
-        <nav className="mx-auto mt-2 flex max-w-3xl gap-1">
+        {/* 三栏按屏幕宽度等分：每栏 flex-1 + 文字居中，选中态的底线正好铺满整栏 */}
+        <nav className="mx-auto mt-2 flex max-w-3xl">
           {tabs.map((tab) => (
             <a
               key={tab.key}
               href={tab.href}
               className={
                 active === tab.key
-                  ? '-mb-px border-b-2 border-slate-900 px-3 py-2 text-sm font-medium text-slate-900 dark:border-slate-100 dark:text-slate-50'
-                  : '-mb-px border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? '-mb-px flex-1 border-b-2 border-slate-900 px-2 py-2 text-center text-sm font-medium text-slate-900 dark:border-slate-100 dark:text-slate-50'
+                  : '-mb-px flex-1 border-b-2 border-transparent px-2 py-2 text-center text-sm text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
               }
             >
               {tab.label}
