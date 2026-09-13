@@ -35,8 +35,10 @@ docker run --rm -v daybook_pb_data:/data -v "$PWD/backups:/backup" alpine \
 **恢复**：去 `/_/` 的 Settings → Backups 点 restore（PocketBase 自带，会让你先确认）；
 或者停掉容器、用快照里的 `pb_data` 覆盖回去再启动。
 
-> ⚠️ **`deploy/backup.sh` 已废弃，别再用了**：它还是 Postgres 版（`docker compose exec db pg_dump`），
-> 而 Go 版早就没有 `db` 服务，跑起来会直接失败。备份现在已经由应用内置（见上）。
+> `deploy/backup.sh` 保留着，但它现在**只是上面那条命令的薄包装**（它以前是 Postgres 版
+> ——`docker compose exec db pg_dump`——而 Go 版早就没有 `db` 服务，那种写法跑起来必然
+> 失败）。部署机的 crontab 里如果还写着它，可以继续用：它会顺手把最新那份拷到宿主，
+> 有 `RSYNC_TARGET` 时再推去异地。
 
 > Go 版只有**一个**数据卷（compose 里的 `pb_data`），里面装着全部要紧的东西：
 > SQLite 数据库（含用户、日记、订阅排程）、令牌签名密钥、以及 **VAPID 私钥**。
