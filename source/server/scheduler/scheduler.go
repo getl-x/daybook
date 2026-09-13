@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/getl-x/daybook/source/server/applog"
 	"github.com/getl-x/daybook/source/server/auth"
 	"github.com/getl-x/daybook/source/server/diary"
 	"github.com/getl-x/daybook/source/server/notifications"
@@ -47,7 +48,7 @@ type Deps struct {
 	Sender push.Sender
 	// Now 提供 tick 的"现在"；测试注入固定时钟。
 	Now func() time.Time
-	// Logf 记一行日志；为 nil 时落到 App 的日志。
+	// Logf 记一行日志；为 nil 时走 applog（同时进 PocketBase 的 _logs 表与 stderr）。
 	Logf func(level string, format string, args ...any)
 	// Purge 顺手清理过了宽限期的待删除账号；为 nil 表示这一步不做。
 	Purge func(now time.Time) (int, error)
@@ -260,6 +261,7 @@ func processSchedule(deps Deps, item store.DueSchedule, now time.Time, report *R
 	}
 
 	delivered, failedHere, goneHere := 0, 0, 0
+	firstError := ""
 	for _, subscription := range subscriptions {
 		ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 		result := deps.Sender.Send(ctx, push.Subscription{
@@ -278,6 +280,12 @@ func processSchedule(deps Deps, item store.DueSchedule, now time.Time, report *R
 			goneHere++
 		default:
 			failedHere++
+		}
+		// 只留第一条失败的原因（形如 "HTTP 410"）。汇总里不带状态码就分不出
+		// "订阅真没了"还是"VAPID 密钥轮换"（见设计 §6 D1），而这两者的处置
+		// 完全不同：前者让用户在设置页重订，后者要先查密钥。
+		if result.Status != push.StatusSent && firstError == "" {
+			firstError = result.Error
 		}
 	}
 	report.DisabledSubscriptions += goneHere
@@ -299,12 +307,19 @@ func processSchedule(deps Deps, item store.DueSchedule, now time.Time, report *R
 		return err
 	}
 	lastError := fmt.Sprintf("%d 个订阅发送失败，%d 个已失效", failedHere, goneHere)
+	if firstError != "" {
+		lastError += "（" + firstError + "）"
+	}
 	if err := store.FinishDelivery(deps.App, item.UserID, date, item.Kind, "failed", lastError); err != nil {
 		return err
 	}
 	report.Failed++
-	logf(deps, "warn", "提醒发送失败，稍后重试：user=%s kind=%s failed=%d gone=%d",
-		item.UserID, item.Kind, failedHere, goneHere)
+	reason := firstError
+	if reason == "" {
+		reason = "无"
+	}
+	logf(deps, "warn", "提醒发送失败，稍后重试：user=%s kind=%s failed=%d gone=%d 首个原因=%s",
+		item.UserID, item.Kind, failedHere, goneHere, reason)
 	if len(remaining) == 0 {
 		return advance(deps, item.UserID, item.Kind, date, settings, location, now, report)
 	}
@@ -390,18 +405,12 @@ func kindClock(settings store.Settings, kind notifications.ReminderKind) string 
 	return settings.EveningReminderTime
 }
 
+// logf 记一行日志。默认走 applog（同时进 PocketBase 的 _logs 表与 stderr），
+// 测试可以注入 Deps.Logf 把日志收进内存。
 func logf(deps Deps, level string, format string, args ...any) {
 	if deps.Logf != nil {
 		deps.Logf(level, format, args...)
 		return
 	}
-	message := fmt.Sprintf(format, args...)
-	switch level {
-	case "error":
-		deps.App.Logger().Error(message)
-	case "warn":
-		deps.App.Logger().Warn(message)
-	default:
-		deps.App.Logger().Info(message)
-	}
+	applog.Logf(deps.App, applog.Level(level), format, args...)
 }

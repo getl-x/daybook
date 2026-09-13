@@ -98,6 +98,7 @@ app.Cron() 每分钟 → scheduler.RunDue
 - **D1 — 401/403 的处理（已决策：立即禁用）**：Node 版把 401/403 归入 `failed`（设计初稿称「Node 会永久空转重试」是误读——`db/notification-store.ts` 的 `failed` 分支同样会在 10 次后自动禁用）。Go 版**刻意不跟**：401/403 与 404/410 同归 `gone`，收到就立刻写 `disabled_at`。理由是这类失败**永远不会自愈**（VAPID 密钥跟这条订阅不是同一对，典型成因是数据卷被重建），继续重试只会每天刷失败日志；代价是一次异常 403（如 CDN 抖动）会踢掉一条本来还能用的订阅——而这是用户重新订阅就能修好的，比「每天静默失败、日志越刷越吵」便宜。
 - **D2 — 调度载体**：Node 用进程内 `setInterval`；Go 版用 PocketBase 自带的 `app.Cron()`，跟着 app 生命周期起停。另加一把进程内互斥锁防 tick 重叠；**一致性仍由 `UNIQUE(user, local_date, kind)` 保证，不依赖锁**。
 - **D3 — `reminder_schedule.locked_at` 不使用**：Node 版从未写这个字段（已核对源码），它是 schema 预留。Go 版同样不写，靠唯一索引保证幂等。该字段将保持为空。
+- **D4 — 业务日志双写**：Node 版直接打 stdout。PocketBase 生产模式下**只往数据库写**（`core/base.go` 里唯一往终端打印的 `printLog` 只在 `app.IsDev()` 为真时调用），而容器部署下排障的第一个动作是 `docker compose logs`。所以我们的业务日志经 `applog` 同时写两处：一遍给 PocketBase（进 `_logs` 表、`/_/` 面板可按等级筛），一遍给 stderr（能直接 grep、能进日志采集）。刻意**不开** `DefaultDev`——那会连带把 SQL 语句一起刷进控制台。代价是 dev 模式下同一行出现两次。
 
 ## 7. 韧性规则与常量
 
@@ -143,7 +144,9 @@ app.Cron() 每分钟 → scheduler.RunDue
 
 **容器级**（WSL Docker，已有可用工具链）
 
-- 构建镜像 → 起容器 → 登录 → `GET /v1/settings` 拿到非空 `vapid_public_key` → `POST` 一条假订阅 → `GET /v1/notifications/status` 能看到它。
+- 构建镜像 → 起容器 → 登录 → `GET /v1/settings` 拿到非空 `vapid_public_key`（并自愈出两条排程行）→ `POST` 一条假订阅 → `GET /v1/notifications/status` 能看到它。
+- 重启容器 → 公钥**完全相同**（证明密钥是持久化的，不是每次重生成）。
+- 把某条排程的 `next_fire_at` 改到过去 → 等一轮 tick → 日志里出现「提醒已发送」/「提醒失败」且投递记录真的落库（证明 cron 在跑，而不是只编译得过）。
 
 ## 9. 验收标准
 

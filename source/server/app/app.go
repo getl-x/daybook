@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/getl-x/daybook/source/server/api"
+	"github.com/getl-x/daybook/source/server/applog"
 	"github.com/getl-x/daybook/source/server/auth"
 	"github.com/getl-x/daybook/source/server/push"
 	"github.com/getl-x/daybook/source/server/scheduler"
@@ -57,7 +58,7 @@ func RegisterHooks(application core.App, config Config) {
 		// 前端据此禁用"开启每日提醒"。
 		keys, err := vapid.ResolveKeys(event.App, config.VAPIDSubject)
 		if err != nil {
-			event.App.Logger().Error("解析 VAPID 密钥失败，推送将不可用", "error", err)
+			applog.Logf(event.App, applog.LevelError, "解析 VAPID 密钥失败，推送将不可用：%v", err)
 			return nil
 		}
 		vapidPublicKey = &keys.PublicKey
@@ -80,7 +81,7 @@ func RegisterHooks(application core.App, config Config) {
 				},
 			})
 		}); err != nil {
-			event.App.Logger().Error("注册提醒 cron 失败", "error", err)
+			applog.Logf(event.App, applog.LevelError, "注册提醒 cron 失败：%v", err)
 		}
 		return nil
 	})

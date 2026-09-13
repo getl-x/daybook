@@ -15,6 +15,7 @@ import (
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 
+	"github.com/getl-x/daybook/source/server/applog"
 	"github.com/getl-x/daybook/source/server/store"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -66,14 +67,14 @@ func ResolveKeys(app core.App, subject string) (*Keys, error) {
 	}
 	if found {
 		if keys, ok := parseStoredKeys(raw); ok {
-			app.Logger().Info("使用 app_settings 里已保存的 VAPID 密钥",
-				"subject", resolvedSubject)
+			applog.Logf(app, applog.LevelInfo,
+				"使用 app_settings 里已保存的 VAPID 密钥：subject=%s", resolvedSubject)
 			return keys, nil
 		}
 		// 脏数据（手工改库、更早版本写入的别的形状）不该让服务起不来：
 		// 重新生成一对覆盖掉。代价是已存在的订阅要等到下一次推送才发现失效。
-		app.Logger().Warn("app_settings 里的 VAPID 密钥不可用，将重新生成一对",
-			"subject", resolvedSubject)
+		applog.Logf(app, applog.LevelWarn,
+			"app_settings 里的 VAPID 密钥不可用，将重新生成一对：subject=%s", resolvedSubject)
 	}
 
 	privateKey, publicKey, err := webpush.GenerateVAPIDKeys()
@@ -87,8 +88,8 @@ func ResolveKeys(app core.App, subject string) (*Keys, error) {
 	if err := store.SetAppSetting(app, SettingKey, string(payload)); err != nil {
 		return nil, fmt.Errorf("保存 VAPID 密钥失败：%w", err)
 	}
-	app.Logger().Info("已生成 VAPID 密钥并存入 app_settings",
-		"subject", resolvedSubject)
+	applog.Logf(app, applog.LevelInfo,
+		"已生成 VAPID 密钥并存入 app_settings：subject=%s", resolvedSubject)
 	return &Keys{PublicKey: publicKey, PrivateKey: privateKey}, nil
 }
 

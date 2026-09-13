@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getl-x/daybook/source/server/applog"
 	"github.com/getl-x/daybook/source/server/auth"
 	"github.com/getl-x/daybook/source/server/diary"
 	"github.com/getl-x/daybook/source/server/schedule"
@@ -595,7 +596,7 @@ func handleSettingsGet(event *core.RequestEvent, vapidPublicKey *string) error {
 	// 同一理由——设置页是用户唯一会主动打开的地方）。失败不致命，设置照常能打开，
 	// 脏时区之类的数据问题留给下一轮 tick 去报。
 	if err := scheduler.RescheduleUser(event.App, user.Id, clock()); err != nil {
-		event.App.Logger().Warn("重算提醒排程失败", "user", user.Id, "error", err)
+		applog.Logf(event.App, applog.LevelWarn, "重算提醒排程失败：user=%s err=%v", user.Id, err)
 	}
 	return event.JSON(http.StatusOK, renderSettings(context.Settings, vapidPublicKey, context.Subscriptions))
 }
@@ -673,7 +674,7 @@ func handleSettingsPatch(event *core.RequestEvent, vapidPublicKey *string) error
 
 	// 改完立即重算排程，否则新时间要等到下一轮 tick（或下次打开设置页）才生效。
 	if err := scheduler.RescheduleUser(event.App, user.Id, clock()); err != nil {
-		event.App.Logger().Warn("重算提醒排程失败", "user", user.Id, "error", err)
+		applog.Logf(event.App, applog.LevelWarn, "重算提醒排程失败：user=%s err=%v", user.Id, err)
 	}
 
 	updated, err := loadSettings(event.App, user.Id)

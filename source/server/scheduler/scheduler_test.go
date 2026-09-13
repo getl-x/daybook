@@ -28,8 +28,15 @@ func TestRunDueDisablesOnUnauthorizedImmediately(t *testing.T) {
 	dueMorning(t, app, user.Id)
 	mustSubscribe(t, app, user.Id, "https://push.example/rotated-keys")
 
-	// 走真实分类函数，而不是手写 StatusGone
-	sender := &fakeSender{status: push.ClassifyStatus(http.StatusUnauthorized).Status}
+	// 直接把真实分类函数的返回喂进去，而不是手写 StatusGone：这样
+	// "HTTP 状态码 → 永久失败 → 立即禁用 → 记录原因"整条链都在断言范围内。
+	unauthorized := push.ClassifyStatus(http.StatusUnauthorized)
+	if unauthorized.Status != push.StatusGone || unauthorized.Error != "HTTP 401" {
+		t.Fatalf("401 的分类变了：%+v", unauthorized)
+	}
+	sender := &fakeSender{results: map[string]push.Result{
+		"https://push.example/rotated-keys": unauthorized,
+	}}
 	report := RunDue(deps(app, sender))
 
 	if report.DisabledSubscriptions != 1 {
@@ -44,6 +51,16 @@ func TestRunDueDisablesOnUnauthorizedImmediately(t *testing.T) {
 	}
 	if len(sender.sent) != 1 {
 		t.Fatalf("永久的 401 不该重试，只应尝试 1 次，得到 %d 次", len(sender.sent))
+	}
+	// 投递记录必须带上状态码：只写"N 个失败"分不出 401/403 与 404/410，
+	// 而这两者的处置完全不同（见设计 §6 D1）。
+	state, err := store.GetDelivery(app, user.Id, today, notifications.KindMorning)
+	if err != nil {
+		t.Fatalf("读投递记录失败：%v", err)
+	}
+	want := "0 个订阅发送失败，1 个已失效（HTTP 401）"
+	if state == nil || state.LastError != want {
+		t.Fatalf("last_error 期望 %q，得到 %+v", want, state)
 	}
 }
 
