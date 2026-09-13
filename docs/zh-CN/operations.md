@@ -181,16 +181,20 @@ docker compose logs app --tail 100
 ```bash
 # 1) VAPID 密钥解析出来了吗（首次启动自动生成并写进 app_settings，不需要手工配 .env）
 docker compose logs app | grep -i "VAPID"
-#   正常会看到"已生成 VAPID 密钥并存入 app_settings"或"使用 app_settings 里已保存的 VAPID 密钥"
+#   正常会看到"[INFO] 已生成 VAPID 密钥并存入 app_settings：subject=…"；
+#   重启后是"[INFO] 使用 app_settings 里已保存的 VAPID 密钥：subject=…"
 # 2) 这台设备订阅上了吗、最近发过没
 curl -s -H "authorization: Bearer <access token>" https://你的域名/v1/notifications/status
 #   看 push_configured 是否 true、subscriptions 数量、recent_deliveries 里的 status/attempts/last_error
 # 3) 调度器在跑吗（每分钟一次 tick）
 docker compose logs app | grep "排程已推进"
 ```
-- `push_configured: false` / `vapid_public_key: null` → 密钥没解析出来，日志里有「解析 VAPID 密钥失败」。重启容器会再试一次。
-- `recent_deliveries` 里 `failed` 且 `last_error` 是 `HTTP 410` → 订阅已失效（浏览器清了数据或换了设备）→ 在设置页重新开启提醒。
-- `recent_deliveries` 里 `failed` 且 `last_error` 形如「0 个订阅发送失败，1 个已失效」→ 那条订阅跟当前的 VAPID 密钥不是同一对（多半是数据卷被重建过）。这类失败是**永久的，收到就立刻禁用**（决策见设计 §6 D1），所以设备列表里它会直接变成"已停用"——去设置页重新开启提醒即可。
+> 我们的业务日志会带 `[INFO]` / `[WARN]` / `[ERROR]` 前缀进 stdout（`docker compose logs` 能直接 grep）。
+> 同一条也会写进 PocketBase 的 `_logs` 表，`/_/` 面板的 Logs 页可以按等级和关键字筛。
+
+- `push_configured: false` / `vapid_public_key: null` → 密钥没解析出来，日志里有「`[ERROR]` 解析 VAPID 密钥失败」。重启容器会再试一次。
+- `recent_deliveries` 里 `failed`、`last_error` 形如「0 个订阅发送失败，1 个已失效（`HTTP 410`）」→ 客户端那头订阅没了（浏览器清了数据、卸载、换设备）→ 在设置页重新开启提醒。
+- 同一位置带的是 `HTTP 401` / `HTTP 403` → 那条订阅跟当前的 VAPID 密钥不是同一对（多半是数据卷被重建过）。这类失败是**永久的，收到就立刻禁用**（决策见设计 §6 D1），所以设备列表里它会直接变成"已停用"——去设置页重新开启提醒即可。
 - 一直提示 `没有可用的推送订阅` → 设备侧没订阅成功：iOS 必须是**主屏图标**打开的 PWA；浏览器必须是 HTTPS。
 - `skipped` → 你当时已经写完了（"仅未完成时提醒"开着）。
 - 都正常但仍收不到 → 手机系统层：通知权限、省电/后台限制、专注模式。
