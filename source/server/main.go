@@ -14,6 +14,7 @@ import (
 
 	daybookapp "github.com/getl-x/daybook/source/server/app"
 	_ "github.com/getl-x/daybook/source/server/migrations"
+	"github.com/getl-x/daybook/source/server/ops"
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 
 	// 把 IANA 时区库编进二进制：容器镜像里没有 /usr/share/zoneinfo，
@@ -28,6 +29,10 @@ func main() {
 
 	// 迁移文件在 migrations 包里以 Go 代码形式注册（import 触发 init）。
 	migratecmd.MustRegister(application, application.RootCmd, migratecmd.Config{})
+
+	// 运维子命令：healthcheck（容器健康检查直接调它，不必依赖镜像里有 wget）
+	// 与 backup（`docker compose exec app daybook backup`）。
+	ops.RegisterCommands(application, application.RootCmd)
 
 	if err := application.Start(); err != nil {
 		log.Fatal(err)

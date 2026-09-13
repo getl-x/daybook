@@ -1,11 +1,16 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/getl-x/daybook/source/server/api"
 	"github.com/getl-x/daybook/source/server/applog"
 	"github.com/getl-x/daybook/source/server/auth"
+	"github.com/getl-x/daybook/source/server/ops"
 	"github.com/getl-x/daybook/source/server/push"
 	"github.com/getl-x/daybook/source/server/scheduler"
 	"github.com/getl-x/daybook/source/server/vapid"
@@ -13,15 +18,25 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// reminderCronSpec 是每分钟一次。
-const reminderCronSpec = "* * * * *"
+const (
+	// reminderCronSpec 是每分钟一次。
+	reminderCronSpec = "* * * * *"
+	// dailyBackupCronSpec 是每天 03:00 **UTC**——PocketBase 的 cron 默认就用 UTC
+	//（tools/cron/cron.go 里 `timezone: time.UTC`），compose 里的 TZ 管不到它。
+	// 03:00 UTC = 北京 11:00，与日记日切换（用户本地 04:00）和提醒高峰都不撞车。
+	// 具体几点其实不敏感：EnsureDaily 按 UTC 日期幂等，启动钩子还会补当天那份。
+	dailyBackupCronSpec = "0 3 * * *"
+)
 
-// reminderCronID 是 cron 任务的固定 id。
+// cron 任务的固定 id。
 //
-// PocketBase 的 cron.MustAdd 在 id 重复时会 panic，所以这个任务只能注册一次——
-// 也正是密钥解析与 cron 注册都放在 OnBootstrap 而不是 OnServe 的原因：
-// OnServe 每个监听器都会触发一次，OnBootstrap 只触发一次。
-const reminderCronID = "daybook-reminders"
+// PocketBase 的 cron 在 job id 重复时会报错（MustAdd 版本直接 panic），所以这些
+// 任务只能注册一次——这也是密钥解析、备份与 cron 注册全放在 OnBootstrap 而不是
+// OnServe 的原因：OnServe 每个监听器都会触发一次，OnBootstrap 只触发一次。
+const (
+	reminderCronID    = "daybook-reminders"
+	dailyBackupCronID = "daybook-daily-backup"
+)
 
 // New 组装 PocketBase 应用（对应 Node 版的 createPgDb + buildApp 两步）。
 func New(config Config) *pocketbase.PocketBase {
@@ -41,16 +56,50 @@ func RegisterHooks(application core.App, config Config) {
 	var vapidPublicKey *string
 	var sender push.Sender
 
-	// 迁移必须显式跑。PocketBase **不会**在 serve 时自动应用 core.AppMigrations
-	//（`RunAppMigrations` 在整个依赖里只有定义、没有调用方），migratecmd 也只
-	// 提供 CLI 子命令。少了这一步服务照样能起来、/healthz 也照样 200，
-	// 但一个集合都不会建——是那种"部署完看着正常、一用就全崩"的坑。
 	application.OnBootstrap().BindFunc(func(event *core.BootstrapEvent) error {
+		// 先看"这次启动之前库里有没有东西"，用来判断算不算升级——这个判断必须在
+		// 迁移之前做，否则新建的库也会被当成"已有库"。
+		dataDir := event.App.DataDir()
+		if dataDir == "" {
+			dataDir = config.DataDir
+		}
+		_, statErr := os.Stat(filepath.Join(dataDir, "data.db"))
+		databaseExists := statErr == nil
+		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return statErr
+		}
+
 		if err := event.Next(); err != nil {
 			return err
 		}
+
+		manager := ops.BackupManager{
+			DataDir: event.App.DataDir(),
+			Create:  event.App.CreateBackup,
+		}
+		// 升级前先备一份：迁移万一改坏数据，能回滚的就是它。这一步**失败即拒绝
+		// 启动**——宁可不起来，也不要在"该备份却备不了"的状态下把库升上去。
+		if _, err := manager.BeforeUpgrade(context.Background(), config.AppVersion, databaseExists); err != nil {
+			return err
+		}
+
+		// 迁移必须显式跑。PocketBase **不会**在 serve 时自动应用 core.AppMigrations
+		//（`RunAppMigrations` 在整个依赖里只有定义、没有调用方），migratecmd 也只
+		// 提供 CLI 子命令。少了这一步服务照样能起来、/healthz 也照样 200，
+		// 但一个集合都不会建——是那种"部署完看着正常、一用就全崩"的坑。
 		if err := event.App.RunAppMigrations(); err != nil {
 			return err
+		}
+		// 记下这次成功启动的版本：下次启动才判断得出"这是升级"。
+		if err := manager.MarkVersion(config.AppVersion); err != nil {
+			return err
+		}
+		// 补今天的日备份（03:00 时容器没开着的话，靠这里补上）。
+		// 这一步刻意**不致命**：备份失败不该把人挡在自己的日记外面，而下一轮
+		// cron 与下次启动都会重试。这也是与 LastDone 唯一的行为差异——那边
+		// 把启动时的 EnsureDaily 也当作致命错误。
+		if err := manager.EnsureDaily(context.Background()); err != nil {
+			applog.Logf(event.App, applog.LevelError, "启动时补日备份失败：%v", err)
 		}
 
 		// 密钥解析失败**不致命**：服务要照常起来（日记本身不依赖推送），
@@ -82,6 +131,15 @@ func RegisterHooks(application core.App, config Config) {
 			})
 		}); err != nil {
 			applog.Logf(event.App, applog.LevelError, "注册提醒 cron 失败：%v", err)
+		}
+
+		// 每天一份日备份（保留 7 份，见 ops.BackupManager）。
+		if err := event.App.Cron().Add(dailyBackupCronID, dailyBackupCronSpec, func() {
+			if err := manager.EnsureDaily(context.Background()); err != nil {
+				applog.Logf(event.App, applog.LevelError, "每日备份失败：%v", err)
+			}
+		}); err != nil {
+			applog.Logf(event.App, applog.LevelError, "注册每日备份 cron 失败：%v", err)
 		}
 		return nil
 	})
