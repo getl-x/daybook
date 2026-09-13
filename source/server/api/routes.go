@@ -13,6 +13,7 @@ import (
 	"github.com/getl-x/daybook/source/server/auth"
 	"github.com/getl-x/daybook/source/server/diary"
 	"github.com/getl-x/daybook/source/server/schedule"
+	"github.com/getl-x/daybook/source/server/scheduler"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -21,6 +22,9 @@ import (
 type RouteConfig struct {
 	AppVersion      string
 	DatabaseVersion string
+	// VAPIDPublicKey 是启动时解析出的 Web Push 公钥；nil 表示密钥没解析出来
+	// （前端据此禁用"开启每日提醒"）。经闭包传给 handler，不引入包级状态。
+	VAPIDPublicKey *string
 }
 
 // clock 便于测试注入；生产就是 time.Now。
@@ -58,8 +62,22 @@ func RegisterRoutes(event *core.ServeEvent, config RouteConfig) {
 
 	router.GET("/v1/calendar", handleCalendar)
 
-	router.GET("/v1/settings", handleSettingsGet)
-	router.PATCH("/v1/settings", handleSettingsPatch)
+	// 设置页与推送状态页要用到公钥：用闭包把 config 里的值带进 handler，
+	// 而不是开一个包级变量——那会让测试之间互相污染。
+	router.GET("/v1/settings", func(request *core.RequestEvent) error {
+		return handleSettingsGet(request, config.VAPIDPublicKey)
+	})
+	router.PATCH("/v1/settings", func(request *core.RequestEvent) error {
+		return handleSettingsPatch(request, config.VAPIDPublicKey)
+	})
+
+	router.POST("/v1/notifications/subscriptions", handleSubscriptionCreate)
+	router.GET("/v1/notifications/subscriptions", handleSubscriptionList)
+	router.PATCH("/v1/notifications/subscriptions/{id}", handleSubscriptionPatch)
+	router.DELETE("/v1/notifications/subscriptions/{id}", handleSubscriptionDelete)
+	router.GET("/v1/notifications/status", func(request *core.RequestEvent) error {
+		return handleNotificationStatus(request, config.VAPIDPublicKey)
+	})
 
 	router.DELETE("/v1/account", handleAccountDelete)
 }
@@ -564,7 +582,7 @@ func handleCalendar(event *core.RequestEvent) error {
 
 /* ------------------------------- 设置 ------------------------------- */
 
-func handleSettingsGet(event *core.RequestEvent) error {
+func handleSettingsGet(event *core.RequestEvent, vapidPublicKey *string) error {
 	user, err := requireUser(event)
 	if err != nil {
 		return err
@@ -573,10 +591,16 @@ func handleSettingsGet(event *core.RequestEvent) error {
 	if err != nil {
 		return err
 	}
-	return event.JSON(http.StatusOK, renderSettings(context.Settings, nil, context.Subscriptions))
+	// 自愈排程：老账号可能还没有 reminder_schedule 行（Node 版 rescheduleUser 的
+	// 同一理由——设置页是用户唯一会主动打开的地方）。失败不致命，设置照常能打开，
+	// 脏时区之类的数据问题留给下一轮 tick 去报。
+	if err := scheduler.RescheduleUser(event.App, user.Id, clock()); err != nil {
+		event.App.Logger().Warn("重算提醒排程失败", "user", user.Id, "error", err)
+	}
+	return event.JSON(http.StatusOK, renderSettings(context.Settings, vapidPublicKey, context.Subscriptions))
 }
 
-func handleSettingsPatch(event *core.RequestEvent) error {
+func handleSettingsPatch(event *core.RequestEvent, vapidPublicKey *string) error {
 	user, err := requireUser(event)
 	if err != nil {
 		return err
@@ -647,11 +671,16 @@ func handleSettingsPatch(event *core.RequestEvent) error {
 		return err
 	}
 
+	// 改完立即重算排程，否则新时间要等到下一轮 tick（或下次打开设置页）才生效。
+	if err := scheduler.RescheduleUser(event.App, user.Id, clock()); err != nil {
+		event.App.Logger().Warn("重算提醒排程失败", "user", user.Id, "error", err)
+	}
+
 	updated, err := loadSettings(event.App, user.Id)
 	if err != nil {
 		return err
 	}
-	return event.JSON(http.StatusOK, renderSettings(updated.Settings, nil, updated.Subscriptions))
+	return event.JSON(http.StatusOK, renderSettings(updated.Settings, vapidPublicKey, updated.Subscriptions))
 }
 
 /* ------------------------------ 账号删除 ------------------------------ */
