@@ -20,7 +20,8 @@ type Status string
 const (
 	// StatusSent 表示已交给推送服务。
 	StatusSent Status = "sent"
-	// StatusGone 表示订阅已失效，调用方应立即禁用，别再重试。
+	// StatusGone 表示这条订阅永久发不出去了，调用方应立即禁用、别再重试：
+	// 既涵盖 404/410（订阅真的没了），也涵盖 401/403（VAPID 密钥跟订阅不是同一对）。
 	StatusGone Status = "gone"
 	// StatusFailed 表示暂时性失败，可以重试。
 	StatusFailed Status = "failed"
@@ -62,12 +63,19 @@ func ClassifyStatus(statusCode int) Result {
 	switch {
 	case statusCode >= 200 && statusCode < 300:
 		return Result{Status: StatusSent}
-	case statusCode == http.StatusNotFound || statusCode == http.StatusGone:
-		// 订阅已失效（用户清数据、卸载、浏览器换 token）→ 立即禁用
+	case statusCode == http.StatusNotFound ||
+		statusCode == http.StatusGone ||
+		statusCode == http.StatusUnauthorized ||
+		statusCode == http.StatusForbidden:
+		// 两类永久失败，都必须立即禁用而不是重试：
+		//   404/410 —— 订阅真的没了（用户清数据、卸载、浏览器换 token）；
+		//   401/403 —— 本机的 VAPID 密钥跟这条订阅不是同一对，再发一万次也一样。
+		// 后者永远不会自愈（典型成因是数据卷被重建），让旧订阅立刻消失比每天刷
+		// 失败日志好；决策与代价见 web-push-design §6 D1。
 		return Result{Status: StatusGone, Error: fmt.Sprintf("HTTP %d", statusCode)}
 	default:
-		// 其余一律可重试失败。注意 401/403（VAPID 不匹配）也走这里：
-		// 与 Node 版一致，靠 failure_count 累计到 FAILURE_LIMIT 后自动禁用。
+		// 其余（400/413/429/5xx）都是可重试失败，靠 failure_count 累计到
+		// FAILURE_LIMIT 后自动禁用。
 		return Result{Status: StatusFailed, Error: fmt.Sprintf("HTTP %d", statusCode)}
 	}
 }

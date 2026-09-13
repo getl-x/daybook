@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"testing"
 	"time"
 
@@ -16,6 +17,35 @@ import (
 	// 触发 migrations 包注册，让测试库拿到真实集合结构。
 	_ "github.com/getl-x/daybook/source/server/migrations"
 )
+
+// D1（web-push-design §6）：401/403 是永久失败，第一次收到就禁用，
+// 不再靠 failure_count 熬到 10 次。这里从真实状态码出发走完整条链，
+// 避免"分类改成 gone 了、调度器却还按可重试处理"这种两头不一致。
+func TestRunDueDisablesOnUnauthorizedImmediately(t *testing.T) {
+	app := newApp(t)
+	defer app.Cleanup()
+	user := newUser(t, app, "alice")
+	dueMorning(t, app, user.Id)
+	mustSubscribe(t, app, user.Id, "https://push.example/rotated-keys")
+
+	// 走真实分类函数，而不是手写 StatusGone
+	sender := &fakeSender{status: push.ClassifyStatus(http.StatusUnauthorized).Status}
+	report := RunDue(deps(app, sender))
+
+	if report.DisabledSubscriptions != 1 {
+		t.Fatalf("401 应在这一轮就禁用订阅，得到 %+v", report)
+	}
+	if report.Failed != 1 || report.Sent != 0 {
+		t.Fatalf("期望 failed=1/sent=0，得到 %+v", report)
+	}
+	// 已无可用订阅 → 直接推进，不再重试
+	if got := dueCount(t, app); got != 0 {
+		t.Fatalf("禁用后应推进，得到 %d 条仍到期", got)
+	}
+	if len(sender.sent) != 1 {
+		t.Fatalf("永久的 401 不该重试，只应尝试 1 次，得到 %d 次", len(sender.sent))
+	}
+}
 
 // tickAt 是固定的 tick 时刻：2026-09-13 01:00Z = 09:00 Asia/Shanghai。
 // 默认设置是 Asia/Shanghai + 日界 04:00 + 早间 09:00，所以这一刻正好是早间提醒。

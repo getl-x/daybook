@@ -17,10 +17,10 @@ func TestClassifyStatus(t *testing.T) {
 		{204, StatusSent},
 		{404, StatusGone},
 		{410, StatusGone},
-		// 401/403（VAPID 不匹配）与 Node 版一致归入 failed，
-		// 由 failure_count 累计到 FAILURE_LIMIT 后自动禁用。
-		{401, StatusFailed},
-		{403, StatusFailed},
+		// 401/403（VAPID 密钥跟订阅不是同一对）是永久失败 → 与 404/410 一样
+		// 立即禁用，不再靠 failure_count 慢慢熬（决策见 web-push-design §6 D1）。
+		{401, StatusGone},
+		{403, StatusGone},
 		{400, StatusFailed},
 		{413, StatusFailed},
 		{429, StatusFailed},

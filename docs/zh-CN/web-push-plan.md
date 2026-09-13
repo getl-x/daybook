@@ -18,7 +18,7 @@
 - `/healthz` 与既有 `/v1/*` 的响应形状不得变化。
 - 状态码分类必须自实现：`webpush-go` 的 `SendNotificationWithContext` 是 `return client.Do(req)`，**不校验状态码**。
 - 常量沿用 Node 实测值：`MAX_ATTEMPTS=3`、`DUE_BATCH=200`、`FAILURE_LIMIT=10`、静默推迟上限 `12h`、推送 TTL `12h`、账号宽限期 `7` 天。
-- 401/403 归入 `failed`（与 Node 一致），计入 `failure_count`，满 `FAILURE_LIMIT` 自动禁用。
+- 401/403 **立即禁用**（与 Node 不一致：Node 归入 `failed`、靠计数熬到 10 次）；实施时按设计文档 §6 D1 的定论——理由与代价见那一节。
 - VAPID 密钥不支持环境变量注入；首次启动生成并存入 `app_settings`。
 - 单个用户出错不得中断整轮 tick。
 - Go 注释用中文，风格对齐现有包（解释「为什么」）。
@@ -87,7 +87,7 @@
 
 **Produces:** `Status`（`StatusSent`/`StatusGone`/`StatusFailed`）、`Result{Status,Error}`、`Subscription{Endpoint,P256dh,Auth}`、`Sender` 接口（`Send(ctx, Subscription, []byte) Result`）、`Options{PublicKey,PrivateKey,Subject,TTL}`、`NewSender(Options) Sender`、`ClassifyStatus(int) Result`
 
-**Acceptance:** `ClassifyStatus` 穷举全绿——200/201/202 → `sent`；404/410 → `gone`；401/403/400/413/429/500/503 → `failed`；所有非 `sent` 结果的 `Error` 非空且形式为 `HTTP <code>`；传输层错误 → `failed`（可重试）。
+**Acceptance:** `ClassifyStatus` 穷举全绿——200/201/202 → `sent`；404/410 → `gone`；401/403 → `gone`（D1 定论：立即禁用）；400/413/429/500/503 → `failed`；所有非 `sent` 结果的 `Error` 非空且形式为 `HTTP <code>`；传输层错误 → `failed`（可重试）。
 
 注意 `webpush.GenerateVAPIDKeys()` 返回 `(privateKey, publicKey, err)`，顺序与直觉相反。
 
