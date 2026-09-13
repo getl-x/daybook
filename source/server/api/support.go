@@ -40,11 +40,32 @@ func timezones() []string {
 	return zones
 }
 
+// failure 是 fail 写响应之后返回的哨兵错误。
+type failure struct {
+	status int
+	code   string
+}
+
+func (e *failure) Error() string { return e.code }
+
 // fail 按客户端约定的形状返回错误：{"error": "<code>"}。
 // 前端的 toApiError 就是读 body.error 当错误码（invalid_credentials /
 // unauthorized / not_found / no_fields …）。
+//
+// 注意这里**既写出响应、又返回一个非 nil 的 error**，两者缺一不可：
+//   - 写响应：PocketBase 的 ErrorHandler 渲染的是 {status,message,data} 形状，
+//     和客户端约定不一致，所以自己写；
+//   - 返回非 nil：调用方一律写成 `return fail(...)`。若这里返回 nil，
+//     函数就会继续往下走成功分支——实测会把整张时区表返回给未登录请求。
+//
+// PocketBase 的 ErrorHandler 会检测"响应是否已写出"并直接跳过
+//（router.go 的 ErrorHandler：`if ok, _ := getWritten(resp); ok { return }`），
+// 所以这样用不会产生双份响应体。
 func fail(event *core.RequestEvent, status int, code string) error {
-	return event.JSON(status, map[string]string{"error": code})
+	if err := event.JSON(status, map[string]string{"error": code}); err != nil {
+		return err
+	}
+	return &failure{status: status, code: code}
 }
 
 // isoMillis 固定输出毫秒精度的 UTC 时间串。

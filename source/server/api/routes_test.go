@@ -1,6 +1,9 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -24,10 +27,43 @@ func registerTestRoutes(t testing.TB, app *tests.TestApp, event *core.ServeEvent
 	RegisterRoutes(event, RouteConfig{AppVersion: "test", DatabaseVersion: "test"})
 }
 
-// run 统一补上 BeforeTestFunc——漏掉它的话所有场景都会 404，
-// 而失败信息会误导成"路由写错了"。
+// run 统一给每个场景补两件事：
+//
+//  1. BeforeTestFunc 挂路由——漏掉的话所有场景都会 404，
+//     而失败信息会误导成"路由写错了"。
+//  2. 响应体必须**恰好是一个 JSON 值**的断言。
+//
+// 第 2 条是回归防线。早先 fail() 写出错误响应后返回了 nil，调用方
+// `return fail(...)` 因此没有真的返回，处理函数继续走完成功分支，
+// 于是响应体成了 {"error":"unauthorized"}{"timezones":[...]}——
+// 未登录请求拿到了整张时区表。而只做子串匹配的断言完全看不出来。
 func run(t *testing.T, scenario tests.ApiScenario) {
 	scenario.BeforeTestFunc = registerTestRoutes
+	scenario.AfterTestFunc = func(t testing.TB, app *tests.TestApp, res *http.Response) {
+		if res == nil || res.Body == nil {
+			return
+		}
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			t.Fatalf("读取响应体失败：%v", err)
+		}
+		// 读走之后放回去，避免影响 ApiScenario 自己的断言。
+		res.Body = io.NopCloser(bytes.NewReader(body))
+
+		if len(bytes.TrimSpace(body)) == 0 {
+			return
+		}
+
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		var first any
+		if err := decoder.Decode(&first); err != nil {
+			t.Fatalf("响应体不是合法 JSON：%v（原始内容：%s）", err, body)
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF {
+			t.Errorf("响应体里出现了第二段内容（响应被写了不止一次？）：%s", body)
+		}
+	}
 	scenario.Test(t)
 }
 
