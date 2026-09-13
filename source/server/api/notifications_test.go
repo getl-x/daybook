@@ -79,6 +79,10 @@ func seedSubscription(t testing.TB, app *tests.TestApp, id string, userID string
 	record.Set("auth", "test-auth")
 	record.Set("label", "iPhone · Safari")
 	record.Set("platform", "ios-pwa")
+	// created_at 必须真的写进去：这条字段曾经在 PocketBase 侧整个漏掉，
+	// 设置页因此显示成 0001-01-01（见 migrations/202609130004）。写死一个值
+	// 让断言能精确比对，而不是只匹配 `"created_at":"` 这样的前缀。
+	record.Set("created_at", time.Date(2026, 9, 13, 1, 0, 0, 0, time.UTC))
 	if disabled {
 		record.Set("disabled_at", time.Now().UTC())
 	}
@@ -208,7 +212,7 @@ func TestSubscriptionListReturnsDeviceShape(t *testing.T) {
 		ExpectedContent: []string{
 			`"subscriptions":[{"id":"` + testSubscriptionID + `"`,
 			`"label":"iPhone · Safari"`, `"platform":"ios-pwa"`,
-			`"enabled":true`, `"created_at":"`, `"failure_count":0`,
+			`"enabled":true`, `"created_at":"2026-09-13T01:00:00.000Z"`, `"failure_count":0`,
 		},
 		TestAppFactory: appForPush(headers),
 	})

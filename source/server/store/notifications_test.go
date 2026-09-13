@@ -454,6 +454,47 @@ func TestSetSubscriptionEnabledToggles(t *testing.T) {
 	}
 }
 
+// 订阅的"加入日期"必须真的落库：Node 版是 created_at NOT NULL DEFAULT now()，
+// 设置页拿它显示设备时间（SettingsPage.tsx 的 created_at.slice(0, 10)）。
+func TestUpsertSubscriptionStampsCreatedAtOnce(t *testing.T) {
+	app := newApp(t)
+	defer app.Cleanup()
+	user := newUser(t, app, "alice")
+
+	id, err := UpsertSubscription(app, user.Id, SubscriptionInput{
+		Endpoint: "https://push.example.com/1", P256dh: "p", Auth: "a",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	record, err := app.FindRecordById("push_subscriptions", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := record.GetDateTime("created_at").Time()
+	if first.IsZero() {
+		t.Fatal("created_at 不该是零值——设置页会把它显示成 0001-01-01")
+	}
+
+	// 重新上报：密钥与 last_seen_at 刷新，但 created_at 保持不变
+	if _, err := UpsertSubscription(app, user.Id, SubscriptionInput{
+		Endpoint: "https://push.example.com/1", P256dh: "p2", Auth: "a2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	record, err = app.FindRecordById("push_subscriptions", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := record.GetDateTime("created_at").Time(); !got.Equal(first) {
+		t.Fatalf("重新上报不该改 created_at：%s -> %s", first, got)
+	}
+	if record.GetString("p256dh") != "p2" {
+		t.Fatal("重新上报应刷新密钥")
+	}
+}
+
 func TestCountActiveSubscriptions(t *testing.T) {
 	app := newApp(t)
 	defer app.Cleanup()

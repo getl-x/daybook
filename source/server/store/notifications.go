@@ -349,7 +349,7 @@ func subscriptionFromRecord(record *core.Record) SubscriptionRecord {
 		Platform:     record.GetString("platform"),
 		Disabled:     !record.GetDateTime("disabled_at").IsZero(),
 		FailureCount: record.GetInt("failure_count"),
-		CreatedAt:    record.GetDateTime("created").Time(),
+		CreatedAt:    record.GetDateTime("created_at").Time(),
 	}
 }
 
@@ -381,6 +381,9 @@ func UpsertSubscription(app core.App, userID string, input SubscriptionInput) (s
 		}
 		record = core.NewRecord(collection)
 		record.Set("endpoint", input.Endpoint)
+		// "设备加入日期"只在首次插入时写：重新上报要刷新 last_seen_at 与密钥，
+		// 但设置页拿 created_at 显示订阅时间，不该跟着变。
+		record.Set("created_at", time.Now().UTC())
 	}
 	record.Set("user", userID)
 	record.Set("p256dh", input.P256dh)
