@@ -3,7 +3,8 @@ package app
 import "os"
 
 // DatabaseVersion 随每次新增迁移递增；运维排查时用来确认容器里的库结构版本。
-const DatabaseVersion = "202609130001"
+// 当前值对应 migrations/ 里最新的 202609130003_incident_client_id.go。
+const DatabaseVersion = "202609130003"
 
 // Config 是进程启动所需的全部外部配置。
 //
