@@ -4,36 +4,39 @@
 
 ---
 
-## 9. 备份（务必配）
+## 9. 备份（已内置）
+
+备份由应用自己做，不需要你在宿主上配 cron 或脚本：
+
+- **每天 03:00（UTC）** 一份日备份，保留最近 7 份；容器当时没开着的话，下次启动会补当天那份。
+- **升级前**自动备一份（数据目录里 `.daybook-version` 记的版本与本次启动的不一致时），保留最近 3 份。
+- **随时手工备一份**：
 
 ```bash
-cd /opt/daybook
-bash deploy/backup.sh                       # 立刻试一次，确认备份产物有内容
-BACKUP_DIR=/mnt/backup/daybook KEEP_DAYS=30 bash deploy/backup.sh
+docker compose exec -T app daybook backup 2>/dev/null    # 只回一个文件名
 ```
 
-放进 crontab：
+备份放在数据卷内的 `pb_data/backups/`（PocketBase 自带的备份目录），名字形如
+`daily_daybook_20260913.zip` / `preupgrade_daybook_….zip` / `manual_daybook_….zip`。
+**它们和数据在同一个卷里**——所以"搬到异地"这件事仍然要你自己做：
+
+```bash
+# 把整个卷（库 + 备份）打成一份快照搬到 NAS
+docker run --rm -v daybook_pb_data:/data -v "$PWD/backups:/backup" alpine \
+  tar czf /backup/daybook-$(date +%Y%m%d-%H%M%S).tgz -C /data .
+```
+
+放进 crontab（可选；cron 里 `%` 要转义）：
 
 ```cron
-30 4 * * * cd /opt/daybook && bash deploy/backup.sh >> /var/log/daybook-backup.log 2>&1
+45 4 * * * cd /opt/daybook && docker run --rm -v daybook_pb_data:/data -v /mnt/backup/daybook:/backup alpine tar czf /backup/daybook-$(date +\%Y\%m\%d).tgz -C /data .
 ```
 
-推到异地（可选）：
+**恢复**：去 `/_/` 的 Settings → Backups 点 restore（PocketBase 自带，会让你先确认）；
+或者停掉容器、用快照里的 `pb_data` 覆盖回去再启动。
 
-```cron
-45 4 * * * cd /opt/daybook && RSYNC_TARGET=user@nas:/volume1/backup/daybook bash deploy/backup.sh >> /var/log/daybook-backup.log 2>&1
-```
-
-> ⚠️ **`deploy/backup.sh` 目前还是 Postgres 版（`docker compose exec db pg_dump …`），而 Go 版已经没有任何 `db` 服务了——这个脚本现在会直接失败。**
-> 上面几行先别依赖，等它改成"停 app → 复制 `pb_data` 卷里的 `data.db`"再启用。
-> 在改好之前，手工备份就是：
->
-> ```bash
-> docker compose stop app
-> docker run --rm -v daybook_pb_data:/data -v "$PWD/backups:/backup" alpine \
->   tar czf /backup/daybook-$(date +%Y%m%d-%H%M%S).tgz -C /data .
-> docker compose start app
-> ```
+> ⚠️ **`deploy/backup.sh` 已废弃，别再用了**：它还是 Postgres 版（`docker compose exec db pg_dump`），
+> 而 Go 版早就没有 `db` 服务，跑起来会直接失败。备份现在已经由应用内置（见上）。
 
 > Go 版只有**一个**数据卷（compose 里的 `pb_data`），里面装着全部要紧的东西：
 > SQLite 数据库（含用户、日记、订阅排程）、令牌签名密钥、以及 **VAPID 私钥**。
@@ -209,8 +212,9 @@ docker compose logs app | grep "排程已推进"
 - [ ] 8090 **只**绑在 `127.0.0.1`（`ss -ltnp | grep 8090` 应显示 127.0.0.1），公网直接访问 `IP:8090` 不通。
 - [ ] `/_/` 的超级管理员口令足够强（它等于数据库的完全控制权），且不是从 `/_/#/pbinstall/...` 那条首次安装链接随手设的临时值。
 - [ ] `.env` 权限 600，且不在任何仓库/备份快照里被提交（`.gitignore` 已排除）。
-- [ ] 备份任务真的在跑（**注意：`deploy/backup.sh` 仍是 Postgres 版，见第 9 节的警告**）。
-- [ ] 应用日志里平时不该有报错（`docker compose logs app | tail -100` 扫一眼；Go 版是文本日志，不再是 Node 版的 JSON）。
+- [ ] 备份真的在跑：`docker compose exec app ls -l pb_data/backups` 里应该每天多一份 `daily_daybook_*.zip`；另外把整个卷定期搬到异地（见第 9 节）。
+- [ ] 容器加固真的生效：`docker inspect --format '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}}' <容器名>` 应输出 `true [ALL]`（compose 里已声明，这条是确认平台没把它改掉）。
+- [ ] 应用日志里平时不该有报错（`docker compose logs app | tail -100` 扫一眼；我们自己的日志带 `[INFO]`/`[WARN]`/`[ERROR]` 前缀）。
 - [ ] 系统与基础镜像定期更新：应用镜像走 `docker compose pull`；从源码构建时才 `docker compose build --pull`。
 
 ---
