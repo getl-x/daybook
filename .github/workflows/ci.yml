@@ -1,31 +1,75 @@
 name: CI
 
+# 与 LastDone 同构：前端一个 job、Go 后端一个 job，各自独立跑，互不遮挡。
+#
+# 与 LastDone 的差别只有一处：daybook 的根 package.json 不装 devDependencies
+# （没有 prettier / eslint），所以这里没有 format:check 与 lint 两步——照抄
+# LastDone 会直接失败。typecheck 只能点名跑 @daybook/web：daybook 的根
+# package.json 没有 typecheck 聚合脚本，而且后端已经不是 npm workspace 了。
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verify:
+  web:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: source
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: source/package-lock.json
+
       - name: Install dependencies
         run: npm ci
-      - name: Typecheck (server)
-        run: npm run typecheck -w @daybook/server
-      - name: Typecheck (web)
+
+      - name: Type check
         run: npm run typecheck -w @daybook/web
-      - name: Test (shared + server)
+
+      # 根 package.json 的 test 一次跑完 shared 与 web 两处用例
+      - name: Run unit tests
         run: npm test
-      - name: Build (web)
+
+      - name: Build web
         run: npm run build -w @daybook/web
+
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: source/server
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.x"
+          cache-dependency-path: source/server/go.sum
+
+      - name: Check Go formatting
+        shell: bash
+        run: test -z "$(gofmt -l .)"
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Run Go tests
+        run: go test ./...

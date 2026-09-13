@@ -2,7 +2,8 @@ name: Publish Docker image
 run-name: daybook ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }} · 镜像
 
 # 触发时机：打 v* 标签，或手动指定标签。
-# 推镜像前先用 compose 跑一次真数据库的冒烟（构建出的镜像有问题就不发）。
+# 推镜像前先用 compose 把构建出的镜像真跑一遍
+# （healthz / 登录 / 静态产物 / CLI / 非 root），有问题就不发。
 #
 # 推到两个仓库（同一次构建、同名标签）：
 #   - ghcr.io/getl-x/daybook            （用 GITHUB_TOKEN，无需配置）
@@ -64,17 +65,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 冒烟用的 .env：只是 CI 里的假值，真实部署由使用者自己填（见 deploy/daybook.env.example）
+      # 冒烟用的 .env：compose.yml 的 env_file 指向它，缺文件 compose 会直接报错，
+      # 所以必须写一个（真实部署由使用者自己填，见 deploy/daybook.env.example）。
+      # Go 版只认 DAYBOOK_*；Node 版的 POSTGRES_PASSWORD / JWT_SECRET / PORT /
+      # NODE_ENV / LOG_LEVEL 一个都不再被读取。
+      # DAYBOOK_VERSION 会被 /healthz 回显成 appVersion，下面据此确认这份配置真的进了容器。
       - name: Write throwaway .env for the smoke test
         shell: bash
         run: |
           set -euo pipefail
           cat > .env <<'ENVEOF'
-          POSTGRES_PASSWORD=ci-only-not-a-real-password
-          JWT_SECRET=ci-only-not-a-real-secret-0123456789abcdef
-          PORT=8090
-          NODE_ENV=production
-          LOG_LEVEL=info
+          DAYBOOK_VERSION=ci-smoke
           ENVEOF
 
       - name: Build image (linux/amd64)
@@ -87,7 +88,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Smoke test with a real Postgres (compose)
+      - name: Smoke test the built image (compose)
         shell: bash
         env:
           DAYBOOK_IMAGE: ${{ env.SMOKE_IMAGE }}
@@ -109,9 +110,27 @@ jobs:
             exit 1
           fi
 
-          # 迁移真的跑过、前端产物真的挂上了
-          docker compose logs --no-color app | grep -q "迁移完成" || { echo "看不到迁移日志" >&2; exit 1; }
-          docker compose logs --no-color app | grep -q "前端产物已挂载" || { echo "看不到前端产物日志" >&2; exit 1; }
+          # /healthz 要回显 .env 里的 DAYBOOK_VERSION：证明这份配置真的进了容器，
+          # 而不是镜像里写死的默认值 dev。
+          healthz="$(curl -s http://127.0.0.1:8090/healthz)"
+          case "$healthz" in
+            *'"appVersion":"ci-smoke"'*) ;;
+            *) echo "healthz 未回显 appVersion=ci-smoke：$healthz" >&2; exit 1 ;;
+          esac
+
+          # 迁移真的跑过：登录要查 users 集合（auth.Login 里的 FindFirstRecordByData），
+          # 集合不存在时报的是 500 而不是 401，所以这条 401 就是迁移已应用过的证据。
+          login="$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            -d '{"username":"__ci_probe__","password":"x"}' \
+            http://127.0.0.1:8090/v1/auth/login)"
+          [ "$login" = "401" ] || { echo "/v1/auth/login 期望 401，实际 $login" >&2; exit 1; }
+
+          # 前端产物真的挂上了：index.html 与 web/public 下的文件都从 /app/pb_public 提供
+          root="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/)"
+          [ "$root" = "200" ] || { echo "/ 期望 200（前端产物没挂上？），实际 $root" >&2; exit 1; }
+          manifest="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/manifest.webmanifest)"
+          [ "$manifest" = "200" ] || { echo "/manifest.webmanifest 期望 200，实际 $manifest" >&2; exit 1; }
 
           # 缺失的资源必须 404（不能回 SPA 的 200 HTML）；受保护接口必须 401
           assets="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/assets/does-not-exist.js)"
@@ -121,14 +140,16 @@ jobs:
           spa="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/day/2026-01-01)"
           [ "$spa" = "200" ] || { echo "SPA 路径期望 200，实际 $spa" >&2; exit 1; }
 
-          # CLI 在镜像里可用（路径是 /app/server/...，见 Dockerfile）
-          docker compose exec -T app node server/src/cli/user.ts list >/dev/null
+          # CLI 在镜像里可用（Go 版是 /usr/local/bin/daybook，见 Dockerfile）；
+          # migrate 子命令由 main.go 的 migratecmd 注册，一起确认它挂上了。
+          docker compose exec -T app daybook --help >/dev/null
+          docker compose exec -T app daybook migrate --help >/dev/null
 
           # 非 root 运行
           uid="$(docker run --rm --entrypoint sh "$SMOKE_IMAGE" -c 'id -u')"
-          [ "$uid" = "1000" ] || { echo "容器应以 uid 1000 运行，实际 $uid" >&2; exit 1; }
+          [ "$uid" = "10001" ] || { echo "容器应以 uid 10001 运行，实际 $uid" >&2; exit 1; }
 
-          echo "冒烟通过：healthz 200 / assets 404 / 受保护接口 401 / SPA 200 / 非 root uid=$uid"
+          echo "冒烟通过：healthz 200(appVersion 已回显) / 登录 401 / 前端产物 200 / assets 404 / 受保护接口 401 / SPA 200 / CLI 可用 / 非 root uid=$uid"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
