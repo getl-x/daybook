@@ -5,22 +5,13 @@ import (
 	"testing"
 
 	"github.com/getl-x/daybook/source/server/store"
+	"github.com/getl-x/daybook/source/server/testutil"
 	"github.com/pocketbase/pocketbase/tests"
-
-	// 触发 migrations 包注册，让测试库拿到真实集合结构。
-	_ "github.com/getl-x/daybook/source/server/migrations"
 )
 
 func newApp(t *testing.T) *tests.TestApp {
 	t.Helper()
-	app, err := tests.NewTestApp()
-	if err != nil {
-		t.Fatalf("创建测试应用失败：%v", err)
-	}
-	if err := app.RunAppMigrations(); err != nil {
-		t.Fatalf("执行迁移失败：%v", err)
-	}
-	return app
+	return testutil.NewApp(t)
 }
 
 // storedJSON 读回落库的原始 JSON，用来核对字段名与 Node 版一致。

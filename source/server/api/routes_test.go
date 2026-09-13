@@ -8,8 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	// 触发 migrations 包注册，让测试库拿到真实集合结构。
-	_ "github.com/getl-x/daybook/source/server/migrations"
+	"github.com/getl-x/daybook/source/server/testutil"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
 )
@@ -84,14 +83,8 @@ func assertSingleBody(t testing.TB, app *tests.TestApp, res *http.Response) {
 }
 
 func newApp(t testing.TB) *tests.TestApp {
-	app, err := tests.NewTestApp()
-	if err != nil {
-		t.Fatalf("创建测试应用失败：%v", err)
-	}
-	if err := app.RunAppMigrations(); err != nil {
-		t.Fatalf("执行迁移失败：%v", err)
-	}
-	return app
+	t.Helper()
+	return testutil.NewApp(t)
 }
 
 // appWithUser 建一个"已登录"的应用：建账号、签发访问令牌，并把
@@ -99,18 +92,7 @@ func newApp(t testing.TB) *tests.TestApp {
 // 就固定了，而令牌要等应用起来才拿得到，所以走"工厂回填"这条路。
 func appWithUser(t testing.TB, headers map[string]string) *tests.TestApp {
 	app := newApp(t)
-
-	collection, err := app.FindCollectionByNameOrId("users")
-	if err != nil {
-		t.Fatalf("找不到 users 集合：%v", err)
-	}
-	record := core.NewRecord(collection)
-	record.Set("username", testUsername)
-	record.Set("status", "active")
-	record.SetPassword(testPassword)
-	if err := app.Save(record); err != nil {
-		t.Fatalf("创建账号失败：%v", err)
-	}
+	record := testutil.NewUserWith(t, app, testUsername, testPassword, "active")
 
 	if headers != nil {
 		token, err := record.NewAuthToken()

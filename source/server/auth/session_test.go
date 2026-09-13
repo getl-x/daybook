@@ -5,8 +5,7 @@ import (
 	"testing"
 	"time"
 
-	// 触发 migrations 包注册，让测试库拿到真实集合结构。
-	_ "github.com/getl-x/daybook/source/server/migrations"
+	"github.com/getl-x/daybook/source/server/testutil"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
 )
@@ -15,31 +14,15 @@ const goodPassword = "correct-horse-battery"
 
 func newApp(t *testing.T) *tests.TestApp {
 	t.Helper()
-	app, err := tests.NewTestApp()
-	if err != nil {
-		t.Fatalf("创建测试应用失败：%v", err)
-	}
+	app := testutil.NewApp(t)
+	// 本包的习惯是用 t.Cleanup 收尾（别的包写的是 defer app.Cleanup()）。
 	t.Cleanup(app.Cleanup)
-	if err := app.RunAppMigrations(); err != nil {
-		t.Fatalf("执行迁移失败：%v", err)
-	}
 	return app
 }
 
 func createUser(t *testing.T, app core.App, username string, password string, status string) *core.Record {
 	t.Helper()
-	collection, err := app.FindCollectionByNameOrId("users")
-	if err != nil {
-		t.Fatalf("找不到 users 集合：%v", err)
-	}
-	record := core.NewRecord(collection)
-	record.Set("username", username)
-	record.Set("status", status)
-	record.SetPassword(password)
-	if err := app.Save(record); err != nil {
-		t.Fatalf("创建账号 %s 失败：%v", username, err)
-	}
-	return record
+	return testutil.NewUserWith(t, app, username, password, status)
 }
 
 func TestLoginIssuesSession(t *testing.T) {
