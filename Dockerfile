@@ -45,9 +45,12 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/daybook .
 # ---------- 阶段 3：运行时 ----------
 FROM alpine:3.21
 
-# ca-certificates：Web Push 要往浏览器厂商的推送端点发 HTTPS 请求
+# ca-certificates：Web Push 要往浏览器厂商的推送端点发 HTTPS 请求。
+# 刻意不装 tzdata：IANA 时区库已由 main.go 的 `import _ "time/tzdata"` 编进二进制，
+# 而"日记日"的计算完全依赖它。少一个包、少一处要跟着发版更新的东西。
 RUN apk add --no-cache ca-certificates \
-    && adduser -D -u 10001 daybook
+    && addgroup -S -g 10001 daybook \
+    && adduser -S -D -H -u 10001 -G daybook daybook
 
 WORKDIR /app
 
@@ -62,14 +65,17 @@ ENV DAYBOOK_DATA_DIR=/app/pb_data \
 RUN mkdir -p /app/pb_data && chown -R daybook:daybook /app
 VOLUME ["/app/pb_data"]
 
-# 健康检查：镜像本身只声明，编排层用它判断容器是否可用
+# 健康检查调子命令而不是 wget：它连响应体一起校验（status=ok 且 appVersion 非空），
+# 不会因为"有别的进程占着 8090 也回 200"而误判健康；也省掉对镜像里有没有 wget 的假设。
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD wget -qO- "http://127.0.0.1:8090/healthz" >/dev/null 2>&1 || exit 1
+  CMD ["/usr/local/bin/daybook", "healthcheck"]
 
 EXPOSE 8090
+STOPSIGNAL SIGTERM
 
-# 非 root 运行
-USER daybook
+# 非 root 运行。用数字 uid:gid 而不是用户名：以 read_only、cap_drop 这类严格模式
+# 运行时，运行时不一定会去解析 /etc/passwd。
+USER 10001:10001
 
 # serve 启动时会跑迁移（幂等），无需额外的初始化步骤
 CMD ["daybook", "serve", "--http=0.0.0.0:8090"]

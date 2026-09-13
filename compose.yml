@@ -10,6 +10,7 @@
 #   cp deploy/daybook.env.example .env && 改里面的值
 #   DAYBOOK_IMAGE=daybook:dev docker compose up -d
 #   curl -s http://127.0.0.1:8090/healthz
+#   docker compose exec app daybook backup        # 立刻手工备一份，只回文件名
 #
 # 首次部署后：浏览器打开 https://你的域名/_/ 建超级管理员，
 # 然后在 users 集合里添加账号（注册是关闭的，账号只能这样加）。
@@ -24,6 +25,12 @@ services:
       DAYBOOK_ADDR: 0.0.0.0:8090
       DAYBOOK_DATA_DIR: /app/pb_data
       DAYBOOK_PUBLIC_DIR: /app/pb_public
+      # Go 的内存软上限：不设的话 Go 按宿主总内存推算 GC 目标，
+      # 在小 VPS 上容易在别人吃紧时被 OOM kill。
+      GOMEMLIMIT: ${GOMEMLIMIT:-384MiB}
+      # 只影响日志时间戳这类本地时间；"日记日"用的是每个用户自己的时区设置，
+      # 定时任务走 UTC（PocketBase 的 cron 默认时区）。
+      TZ: ${TZ:-Asia/Shanghai}
     ports:
       # 只绑本机回环：给宿主上的反代用；公网访问不到 8090
       - "127.0.0.1:8090:8090"
@@ -32,6 +39,22 @@ services:
       # 换镜像/升级不会动它；备份也只需备份它。
       - pb_data:/app/pb_data
     restart: unless-stopped
+
+    # ---------------------------- 加固 ----------------------------
+    # 只读根文件系统：应用唯一需要写的地方就是上面那个卷，外加 /tmp。
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    # 应用不需要任何 capability（不绑特权端口、不动网络栈），全丢。
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # 退出时可能要写完一个备份或收尾一次迁移，给足时间再 SIGKILL。
+    stop_grace_period: 30s
+    # 健康检查由镜像自己声明（Dockerfile 里的 HEALTHCHECK 调 `daybook healthcheck`）。
+    # 这里刻意不重复写一遍：两份配置最容易悄悄漂移，而漂移之后"哪个才算数"很难查。
+
     logging:
       driver: json-file
       options:
