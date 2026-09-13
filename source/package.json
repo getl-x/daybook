@@ -9,11 +9,10 @@
   },
   "workspaces": [
     "shared",
-    "server",
     "web"
   ],
   "scripts": {
-    "test": "node --test \"shared/test/*.test.ts\" \"server/test/*.test.ts\" \"web/test/*.test.ts\"",
-    "test:watch": "node --test --watch \"shared/test/*.test.ts\" \"server/test/*.test.ts\" \"web/test/*.test.ts\""
+    "test": "node --test \"shared/test/*.test.ts\" \"web/test/*.test.ts\"",
+    "test:watch": "node --test --watch \"shared/test/*.test.ts\" \"web/test/*.test.ts\""
   }
 }
