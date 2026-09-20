@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 
 import { INCIDENT_TAGS, INCIDENT_TAG_LABELS, type Incident, type IncidentTag } from '../lib/api.ts';
 
@@ -30,11 +30,20 @@ export function fromLocalInputValue(value: string): string {
 }
 
 export function IncidentModal({ incident = null, onClose, onSubmit, onDelete }: Props) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const headingId = useId();
   const [content, setContent] = useState(incident?.content ?? '');
-  const [occurredAtLocal, setOccurredAtLocal] = useState(toLocalInputValue(incident?.occurredAt ?? new Date().toISOString()));
+  const [occurredAtLocal, setOccurredAtLocal] = useState(
+    toLocalInputValue(incident?.occurredAt ?? new Date().toISOString()),
+  );
   const [tag, setTag] = useState<IncidentTag | null>((incident?.tag as IncidentTag | null) ?? 'other');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -54,18 +63,24 @@ export function IncidentModal({ incident = null, onClose, onSubmit, onDelete }: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-lg space-y-4 rounded-t-2xl bg-white p-5 shadow-xl ring-1 ring-slate-200 sm:rounded-2xl dark:bg-slate-900 dark:ring-slate-800"
-      >
+    <dialog
+      ref={dialog}
+      aria-labelledby={headingId}
+      className="incident-dialog"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!pending) onClose();
+      }}
+    >
+      <form onSubmit={submit} className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+          <h3 id={headingId} className="text-base font-semibold text-slate-900 dark:text-slate-50">
             {incident ? '编辑这条记录' : '记录此刻'}
           </h3>
           <button
             type="button"
             onClick={onClose}
+            disabled={pending}
             className="rounded-lg px-2 py-1 text-sm text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             取消
@@ -80,7 +95,7 @@ export function IncidentModal({ incident = null, onClose, onSubmit, onDelete }: 
             rows={4}
             autoFocus
             placeholder="刚刚发生了什么？"
-            className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+            className="diary-textarea"
           />
         </label>
 
@@ -113,7 +128,10 @@ export function IncidentModal({ incident = null, onClose, onSubmit, onDelete }: 
         </div>
 
         {error ? (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">
+          <p
+            role="alert"
+            className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300"
+          >
             {error}
           </p>
         ) : null}
@@ -141,15 +159,11 @@ export function IncidentModal({ incident = null, onClose, onSubmit, onDelete }: 
             <span />
           )}
 
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-          >
+          <button type="submit" disabled={pending} className="button-primary">
             {pending ? '保存中…' : '保存'}
           </button>
         </div>
       </form>
-    </div>
+    </dialog>
   );
 }

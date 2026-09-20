@@ -15,6 +15,10 @@ export interface DraftRecord {
   value: string;
   /** 客户端本地修改时间（重放排序用） */
   modifiedAt: number;
+  /** 草稿对应的服务器版本。旧版草稿缺失此字段，恢复时交给用户选择。 */
+  baseUpdatedAt?: string | null;
+  /** 每次输入独立的版本，防止旧请求删除新草稿。 */
+  revision?: string;
 }
 
 const DB_NAME = 'daybook';
@@ -33,13 +37,18 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-async function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+async function withStore<T>(
+  mode: IDBTransactionMode,
+  run: (store: IDBObjectStore) => IDBRequest<T>,
+): Promise<T> {
   const db = await openDb();
   try {
     return await new Promise<T>((resolve, reject) => {
       const transaction = db.transaction(STORE, mode);
       const request = run(transaction.objectStore(STORE));
-      request.onsuccess = () => resolve(request.result);
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onabort = () => reject(transaction.error ?? new Error('草稿事务未完成'));
+      transaction.onerror = () => reject(transaction.error ?? new Error('草稿写入失败'));
       request.onerror = () => reject(request.error ?? new Error('IndexedDB 操作失败'));
     });
   } finally {
@@ -61,6 +70,28 @@ export async function listDrafts(userId: string): Promise<DraftRecord[]> {
   return all.filter((draft) => draft.userId === userId).sort((a, b) => a.modifiedAt - b.modifiedAt);
 }
 
-export async function clearDraft(userId: string, entryDate: string, field: string): Promise<void> {
-  await withStore('readwrite', (store) => store.delete(draftKey(userId, entryDate, field)));
+export async function clearDraft(
+  userId: string,
+  entryDate: string,
+  field: string,
+  revision?: string,
+): Promise<void> {
+  const db = await openDb();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(STORE, 'readwrite');
+      const store = transaction.objectStore(STORE);
+      const key = draftKey(userId, entryDate, field);
+      const request = store.get(key);
+      request.onsuccess = () => {
+        const current = request.result as DraftRecord | undefined;
+        if (current && current.revision === revision) store.delete(key);
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error ?? new Error('草稿事务未完成'));
+      transaction.onerror = () => reject(transaction.error ?? new Error('草稿删除失败'));
+    });
+  } finally {
+    db.close();
+  }
 }

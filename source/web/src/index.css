@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   color-scheme: light dark;
@@ -30,4 +30,739 @@ body {
 input,
 textarea {
   font-size: 16px;
+}
+
+/* Warm paper, forest ink; shared tokens keep every page in the same visual language. */
+@theme {
+  --color-slate-50: #f7f8f4;
+  --color-slate-100: #edf0e9;
+  --color-slate-200: #dfe5db;
+  --color-slate-300: #c1cbbf;
+  --color-slate-400: #788575;
+  --color-slate-500: #63715f;
+  --color-slate-600: #4d5c4b;
+  --color-slate-700: #3a4b3b;
+  --color-slate-800: #273c30;
+  --color-slate-900: #1d3529;
+  --color-slate-950: #12231c;
+}
+:root {
+  --paper: #f8f7f2;
+  --surface: #fffefa;
+  --ink: #253e30;
+  --muted: #737b6e;
+  --line: #e4e6dc;
+  --accent: #365c43;
+  --tint: #eaf0e3;
+}
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button,
+a {
+  touch-action: manipulation;
+}
+button:not(:disabled),
+select {
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+button:disabled,
+textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.app-layout {
+  min-height: 100dvh;
+}
+.app-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 238px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: calc(36px + var(--safe-top)) 22px 24px;
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+}
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-family: Georgia, serif;
+  font-size: 27px;
+  letter-spacing: -0.8px;
+}
+.brand-mark {
+  width: 42px;
+  height: 45px;
+  padding: 10px;
+  background: var(--accent);
+  border-radius: 13px;
+  color: #fff;
+}
+.brand small {
+  display: block;
+  font: 10px/1.8 sans-serif;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin-top: 3px;
+}
+.sidebar-label {
+  margin: 56px 12px 14px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+}
+.app-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+.nav-item svg {
+  width: 21px;
+  height: 21px;
+  flex-shrink: 0;
+}
+.nav-item small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.75;
+}
+.nav-item:hover {
+  background: var(--paper);
+}
+.nav-item.is-active {
+  background: var(--tint);
+  color: var(--accent);
+  font-weight: 600;
+}
+.sidebar-note {
+  margin: auto 12px 28px;
+  padding-top: 50px;
+}
+.little-leaf {
+  font-size: 29px;
+  color: #9aaa81;
+}
+.sidebar-note p {
+  margin: 14px 0;
+  font-size: 12px;
+  line-height: 2;
+  color: var(--muted);
+}
+.sidebar-note > span:last-child {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--muted);
+}
+.sidebar-logout {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 12px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.app-body {
+  margin-left: 238px;
+}
+.app-header {
+  height: calc(74px + var(--safe-top));
+  padding: var(--safe-top) 44px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.6px;
+}
+.header-tag {
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  padding: 6px 12px;
+  font-size: 10px;
+}
+.mobile-brand,
+.mobile-logout {
+  display: none;
+}
+.app-main {
+  max-width: 1010px;
+  margin: auto;
+  padding: 42px 44px 26px;
+}
+.page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+.eyebrow {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2.4px;
+  margin-bottom: 12px;
+}
+.page-heading h1 {
+  font-family: Georgia, 'Songti SC', 'Noto Serif CJK SC', SimSun, serif;
+  font-size: clamp(25px, 3vw, 35px);
+  font-weight: 500;
+  letter-spacing: -0.5px;
+}
+.page-subtitle {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+.heading-ornament {
+  color: #a4b08b;
+  font-size: 57px;
+  padding-right: 12px;
+}
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.page-content > section,
+.journal-card,
+.calendar-card,
+.incident-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 3px 12px #23352203;
+  border-radius: 18px;
+}
+.page-content > section {
+  padding: 26px;
+  --tw-ring-shadow: 0 0 #0000;
+}
+.page-footer {
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-top: 42px;
+}
+.page-footer span {
+  padding: 0 9px;
+}
+.today-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+  margin: -5px 0 0;
+}
+.today-progress .save-indicator {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+}
+.section-kicker {
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+.journal-card {
+  padding: 25px 28px;
+}
+.journal-card header h2,
+.incident-card h2 {
+  font-family: Georgia, 'Songti SC', SimSun, serif;
+  font-size: 21px;
+  font-weight: 500;
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+.section-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--tint);
+  color: var(--accent);
+  font-size: 22px;
+}
+.diary-field {
+  display: block;
+}
+.field-label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.diary-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 150px;
+  padding: 16px 18px;
+  color: var(--ink);
+  line-height: 1.9;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.diary-textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+  font-size: 14px;
+}
+.diary-textarea:focus {
+  outline: none;
+  border-color: #8ba47f;
+  box-shadow: 0 0 0 3px #8ba47f1a;
+}
+.button-primary,
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 18px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 500;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+.button-primary {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid transparent;
+}
+.button-primary:hover {
+  background: #294a35;
+}
+.button-secondary {
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.button-secondary:hover {
+  background: var(--tint);
+}
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+.form-actions > span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.incident-card {
+  padding: 26px 28px;
+}
+.incident-empty {
+  padding: 28px 16px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.9;
+}
+.incident-empty span {
+  display: block;
+  font-family: Georgia, serif;
+  font-size: 30px;
+  color: #a6b28e;
+  margin-bottom: 8px;
+}
+.evening-invitation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 26px;
+  border: 1px dashed #cdd5c3;
+  border-radius: 16px;
+  color: var(--muted);
+}
+.evening-invitation h2 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.evening-invitation p {
+  margin-top: 6px;
+  font-size: 11px;
+}
+.draft-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.incident-dialog {
+  margin: auto;
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100dvh - var(--safe-top) - 32px);
+  overflow-y: auto;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 26px;
+  box-shadow: 0 24px 100px #15201930;
+}
+.incident-dialog::backdrop {
+  background: #15201970;
+  backdrop-filter: blur(5px);
+}
+@media (max-width: 640px) {
+  .incident-dialog {
+    margin: auto 0 0;
+    width: 100%;
+    max-width: none;
+    border-radius: 22px 22px 0 0;
+    padding: 24px 22px calc(24px + var(--safe-bottom));
+  }
+}
+.install-hint {
+  order: 10;
+  text-align: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+.calendar-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.calendar-intro strong {
+  font-family: Georgia, serif;
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--accent);
+  margin-right: 7px;
+}
+.calendar-card {
+  padding: 30px;
+}
+.calendar-day {
+  min-height: 56px;
+  border: 1px solid transparent;
+}
+.calendar-day.has-record {
+  background: var(--tint);
+  color: var(--accent);
+  border-color: var(--line);
+}
+.calendar-day.is-today {
+  outline: 1.5px solid var(--accent);
+  outline-offset: -3px;
+}
+.login-layout {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--paper);
+  padding: max(30px, var(--safe-top)) 7vw max(30px, var(--safe-bottom));
+  gap: 8vw;
+  align-items: center;
+}
+.login-story {
+  max-width: 460px;
+}
+.login-story h1 {
+  font-family: Georgia, 'Songti SC', SimSun, serif;
+  font-size: clamp(32px, 4vw, 54px);
+  font-weight: 400;
+  line-height: 1.5;
+  margin: 55px 0 22px;
+}
+.login-story > p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 2;
+}
+.login-paper {
+  border-left: 2px solid #9aaa81;
+  padding: 6px 0 6px 22px;
+  margin-top: 38px;
+}
+.login-paper span {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+}
+.login-paper p {
+  font-family: Georgia, 'Songti SC', SimSun, serif;
+  font-size: 19px;
+  margin-top: 12px;
+  line-height: 1.8;
+}
+.login-form {
+  width: 100%;
+  max-width: 410px;
+  padding: 36px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: 0 16px 50px #24332306;
+}
+.login-form h2 {
+  font-family: 'Songti SC', SimSun, serif;
+  font-size: 27px;
+  font-weight: 500;
+}
+.skip-link {
+  position: fixed;
+  top: -80px;
+  left: 20px;
+  background: var(--accent);
+  color: white;
+  padding: 12px 20px;
+  z-index: 100;
+}
+.skip-link:focus {
+  top: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #14231c;
+    --surface: #1c2e24;
+    --ink: #e6eadd;
+    --muted: #a5b19d;
+    --line: #344739;
+    --accent: #a6c390;
+    --tint: #2b4432;
+  }
+  .brand-mark,
+  .button-primary {
+    background: #406b4c;
+    color: #f0f5e9;
+  }
+  .button-primary:hover {
+    background: #4a7957;
+  }
+  .nav-item.is-active {
+    color: #c3d5ad;
+  }
+  .evening-invitation {
+    border-color: var(--line);
+  }
+}
+@media (max-width: 850px) {
+  .app-sidebar {
+    width: 190px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .app-body {
+    margin-left: 190px;
+  }
+  .app-main {
+    padding: 30px 25px;
+  }
+  .app-header {
+    padding-left: 25px;
+    padding-right: 25px;
+  }
+  .brand {
+    font-size: 24px;
+  }
+  .login-layout {
+    gap: 5vw;
+    padding-left: 5vw;
+    padding-right: 5vw;
+  }
+}
+@media (max-width: 640px) {
+  .app-sidebar {
+    position: fixed;
+    inset: auto 0 0;
+    width: auto;
+    padding: 6px 10px calc(6px + var(--safe-bottom));
+    border: 0;
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .app-sidebar > :not(.app-navigation) {
+    display: none;
+  }
+  .app-navigation {
+    flex-direction: row;
+    justify-content: space-around;
+    gap: 5px;
+  }
+  .nav-item {
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    padding: 7px;
+    font-size: 10px;
+    border-radius: 10px;
+  }
+  .nav-item small {
+    display: none;
+  }
+  .nav-item svg {
+    width: 20px;
+    height: 20px;
+  }
+  .app-body {
+    margin-left: 0;
+    padding-bottom: calc(80px + var(--safe-bottom));
+  }
+  .app-header {
+    height: calc(64px + var(--safe-top));
+    padding: var(--safe-top) 22px 0;
+  }
+  .mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: Georgia, serif;
+    font-size: 23px;
+    color: var(--ink);
+  }
+  .mobile-brand svg {
+    width: 22px;
+    height: 22px;
+  }
+  .mobile-logout {
+    display: block;
+    padding: 10px;
+    font-size: 11px;
+  }
+  .header-context,
+  .header-tag {
+    display: none;
+  }
+  .app-main {
+    padding: 28px 18px 18px;
+  }
+  .page-heading {
+    margin-bottom: 26px;
+  }
+  .page-heading h1 {
+    font-size: 25px;
+  }
+  .heading-ornament {
+    font-size: 42px;
+    padding: 0;
+  }
+  .eyebrow {
+    font-size: 8px;
+    letter-spacing: 1.6px;
+  }
+  .page-subtitle {
+    font-size: 10px;
+  }
+  .page-content {
+    gap: 18px;
+  }
+  .page-content > section,
+  .journal-card,
+  .incident-card,
+  .calendar-card {
+    padding: 20px;
+  }
+  .today-progress .save-indicator {
+    flex-basis: 100%;
+    margin: 4px 0 0;
+  }
+  .diary-textarea {
+    padding: 13px;
+  }
+  .evening-invitation {
+    padding: 19px;
+    gap: 10px;
+  }
+  .evening-invitation .button-secondary {
+    white-space: nowrap;
+    padding: 9px 12px;
+  }
+  .calendar-day {
+    min-height: 42px;
+  }
+  .login-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: calc(30px + var(--safe-top)) 22px calc(30px + var(--safe-bottom));
+  }
+  .login-story {
+    width: 100%;
+    max-width: 410px;
+  }
+  .login-story h1 {
+    font-size: 29px;
+    margin: 28px 0 10px;
+  }
+  .login-story > p {
+    font-size: 12px;
+  }
+  .login-paper {
+    display: none;
+  }
+  .login-form {
+    padding: 26px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
 }

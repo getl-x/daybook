@@ -104,9 +104,23 @@ func RunDue(deps Deps) Report {
 
 // RescheduleUser 按该用户当前设置重算两种提醒的下一次触发时刻。
 //
-// 改时间/改时区/开关提醒之后调用；GET /v1/settings 也会调它做自愈——
-// 老账号可能还没有排程行（Node 版注释里的同一理由）。
+// 仅在修改时间、时区或提醒开关之后调用；读取设置用 EnsureUserSchedules。
 func RescheduleUser(app core.App, userID string, now time.Time) error {
+	return scheduleUser(app, userID, now, false)
+}
+
+// EnsureUserSchedules 只补建缺失排程，不推进待发送或等待重试的提醒。
+func EnsureUserSchedules(app core.App, userID string, now time.Time) error {
+	return scheduleUser(app, userID, now, true)
+}
+
+func scheduleUser(app core.App, userID string, now time.Time, onlyMissing bool) error {
+	return app.RunInTransaction(func(tx core.App) error {
+		return writeUserSchedules(tx, userID, now, onlyMissing)
+	})
+}
+
+func writeUserSchedules(app core.App, userID string, now time.Time, onlyMissing bool) error {
 	record, err := store.Ensure(app, userID)
 	if err != nil {
 		return err
@@ -117,6 +131,16 @@ func RescheduleUser(app core.App, userID string, now time.Time) error {
 		return err
 	}
 	for _, kind := range notifications.ReminderKinds {
+		if onlyMissing {
+			_, err := app.FindFirstRecordByFilter("reminder_schedule",
+				"user = {:user} && kind = {:kind}", dbx.Params{"user": userID, "kind": string(kind)})
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
 		at, err := notifications.ComputeNextFire(
 			kindEnabled(settings, kind),
 			kindClock(settings, kind),

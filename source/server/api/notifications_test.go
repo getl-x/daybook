@@ -380,3 +380,55 @@ func TestSettingsGetHealsReminderSchedule(t *testing.T) {
 	}
 	scenario.Test(t)
 }
+
+func TestSettingsGetPreservesDueAndDisabledSchedules(t *testing.T) {
+	headers := map[string]string{}
+	due := time.Date(2026, 9, 19, 1, 0, 0, 0, time.UTC)
+	var userID string
+	scenario := tests.ApiScenario{
+		Name:   "读取设置不能推进到期提醒或重新启用已有空排程",
+		Method: http.MethodGet, URL: "/v1/settings", Headers: headers, ExpectedStatus: http.StatusOK,
+		ExpectedContent: []string{`"timezone":"Asia/Shanghai"`},
+		TestAppFactory: func(t testing.TB) *tests.TestApp {
+			app := appWithUserFactory(headers)(t)
+			user, err := app.FindFirstRecordByData("users", "username", testUsername)
+			if err != nil {
+				t.Fatal(err)
+			}
+			userID = user.Id
+			if err := store.SetSchedule(app, userID, notifications.KindMorning, &due); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.SetSchedule(app, userID, notifications.KindEvening, nil); err != nil {
+				t.Fatal(err)
+			}
+			seedDelivery(t, app, userID, "2026-09-19", notifications.KindMorning, "failed", "retry later")
+			return app
+		},
+		BeforeTestFunc: registerTestRoutesWithVAPID,
+		AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+			assertSingleBody(t, app, res)
+			rows, err := app.FindAllRecords("reminder_schedule")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 2 {
+				t.Fatalf("expected 2 schedules, got %d", len(rows))
+			}
+			for _, row := range rows {
+				at := row.GetDateTime("next_fire_at")
+				if row.GetString("kind") == "morning" && !at.Time().Equal(due) {
+					t.Fatalf("due reminder was moved: %v", at)
+				}
+				if row.GetString("kind") == "evening" && !at.IsZero() {
+					t.Fatalf("disabled schedule was enabled: %v", at)
+				}
+			}
+			delivery, err := store.GetDelivery(app, userID, "2026-09-19", notifications.KindMorning)
+			if err != nil || delivery == nil || delivery.Status != "failed" {
+				t.Fatalf("retry lost: %+v, %v", delivery, err)
+			}
+		},
+	}
+	scenario.Test(t)
+}

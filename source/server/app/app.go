@@ -108,15 +108,15 @@ func RegisterHooks(application core.App, config Config) {
 		keys, err := vapid.ResolveKeys(event.App, config.VAPIDSubject)
 		if err != nil {
 			applog.Logf(event.App, applog.LevelError, "解析 VAPID 密钥失败，推送将不可用：%v", err)
-			return nil
+		} else {
+			vapidPublicKey = &keys.PublicKey
+			sender = push.NewSender(push.Options{
+				PublicKey:  keys.PublicKey,
+				PrivateKey: keys.PrivateKey,
+				Subject:    vapid.SubjectOrDefault(config.VAPIDSubject),
+				TTL:        push.DefaultTTL,
+			})
 		}
-		vapidPublicKey = &keys.PublicKey
-		sender = push.NewSender(push.Options{
-			PublicKey:  keys.PublicKey,
-			PrivateKey: keys.PrivateKey,
-			Subject:    vapid.SubjectOrDefault(config.VAPIDSubject),
-			TTL:        push.DefaultTTL,
-		})
 
 		// 每分钟一次 tick。注册失败只记日志：提醒调度不该拖垮服务启动。
 		if err := event.App.Cron().Add(reminderCronID, reminderCronSpec, func() {

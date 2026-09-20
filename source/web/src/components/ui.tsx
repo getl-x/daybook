@@ -35,12 +35,17 @@ export function SaveStatusLine({
   savedAt: number | null;
   message: string | null;
 }) {
-  if (states.includes('error')) return <span className="text-red-600">登录已过期，请重新登录</span>;
-  if (states.includes('offline')) return <span className="text-amber-600">{message ?? '未同步，已存本机草稿'}</span>;
+  if (states.includes('error')) return <span className="text-red-600">{message ?? '保存失败，请重试'}</span>;
+  if (states.includes('offline'))
+    return <span className="text-amber-600">{message ?? '未同步，已存本机草稿'}</span>;
   if (states.includes('saving')) return <span>正在保存…</span>;
   if (states.includes('dirty')) return <span>有改动待保存…</span>;
   if (savedAt) {
-    return <span>已保存 {new Date(savedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>;
+    return (
+      <span>
+        已保存 {new Date(savedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+      </span>
+    );
   }
   // 没有别的状态可显示时，优先显示 message（例如"本机有旧草稿，但服务器上的内容更新"）
   if (message) return <span className="text-slate-500">{message}</span>;
@@ -60,7 +65,8 @@ export function Banner({
   const styles = {
     info: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
     warn: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-200 dark:ring-amber-900',
-    error: 'bg-red-50 text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900',
+    error:
+      'bg-red-50 text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900',
   }[tone];
 
   return (

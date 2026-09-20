@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-
 import { hrefCalendar, hrefSettings, hrefToday, monthOfLocalToday, useRoute } from '../lib/router.ts';
 
 interface Props {
@@ -9,56 +8,154 @@ interface Props {
   children: ReactNode;
 }
 
-/** 页面外壳：标题栏（含退出）+ 今日/日历/设置 导航 + 内容区。 */
+export function BookMark() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d="M5 3.5h12a2 2 0 0 1 2 2V21H6a3 3 0 0 1-3-3V5.5a2 2 0 0 1 2-2Z" />
+      <path d="M7 3.5V17m-4 1a2 2 0 0 1 2-2h14M11 7h4m-4 3h4" />
+    </svg>
+  );
+}
+
+function NavIcon({ name }: { name: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {name === 'today' ? (
+        <>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
+        </>
+      ) : name === 'calendar' ? (
+        <>
+          <rect x="4" y="5" width="16" height="16" rx="3" />
+          <path d="M8 3v4m8-4v4M4 11h16m-11 4h.01M12 15h.01M16 15h.01" />
+        </>
+      ) : (
+        <>
+          <path d="M4 7h16M4 17h16" />
+          <circle cx="9" cy="7" r="2.5" fill="var(--paper)" />
+          <circle cx="15" cy="17" r="2.5" fill="var(--paper)" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 export function AppShell({ title, subtitle, onLogout, children }: Props) {
   const route = useRoute();
-  const calendarMonth = route.name === 'calendar' ? route.month : route.name === 'day' ? route.date.slice(0, 7) : monthOfLocalToday();
-  const active = route.name === 'today' ? 'today' : route.name === 'settings' ? 'settings' : 'calendar';
-
+  const month =
+    route.name === 'calendar'
+      ? route.month
+      : route.name === 'day'
+        ? route.date.slice(0, 7)
+        : monthOfLocalToday();
+  const active =
+    route.name === 'today'
+      ? 'today'
+      : route.name === 'settings'
+        ? 'settings'
+        : route.name === 'install'
+          ? ''
+          : 'calendar';
   const tabs = [
-    { key: 'today' as const, label: '今日', href: hrefToday() },
-    { key: 'calendar' as const, label: '日历', href: hrefCalendar(calendarMonth) },
-    { key: 'settings' as const, label: '设置', href: hrefSettings() },
+    { key: 'today', label: '今日', detail: '把今天留在这里', href: hrefToday() },
+    { key: 'calendar', label: '日历', detail: '回看走过的日子', href: hrefCalendar(month) },
+    { key: 'settings', label: '设置', detail: '找到自己的节奏', href: hrefSettings() },
   ];
-
   return (
-    <div className="min-h-full bg-slate-50 pb-[calc(5rem+var(--safe-bottom))] dark:bg-slate-950">
-      {/* 顶部让出状态栏高度（--safe-top 见 index.css）：原生壳里标题栏不再被状态栏压住，
-          浏览器 / PWA 里这个值恒为 0，和改动前完全一致。 */}
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/85 px-4 pt-[calc(0.75rem+var(--safe-top))] backdrop-blur dark:border-slate-800 dark:bg-slate-900/85">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">{title}</p>
-            <p className="truncate text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onLogout}
-            className="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            退出
-          </button>
-        </div>
-
-        {/* 三栏按屏幕宽度等分：每栏 flex-1 + 文字居中，选中态的底线正好铺满整栏 */}
-        <nav className="mx-auto mt-2 flex max-w-3xl">
+    <div className="app-layout">
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById('main-content')?.focus();
+        }}
+      >
+        跳到内容
+      </a>
+      <aside className="app-sidebar">
+        <a href={hrefToday()} className="brand">
+          <span className="brand-mark">
+            <BookMark />
+          </span>
+          <span>
+            daybook<small>日子，值得记下来</small>
+          </span>
+        </a>
+        <p className="sidebar-label">我的日记</p>
+        <nav className="app-navigation" aria-label="主导航">
           {tabs.map((tab) => (
             <a
               key={tab.key}
               href={tab.href}
-              className={
-                active === tab.key
-                  ? '-mb-px flex-1 border-b-2 border-slate-900 px-2 py-2 text-center text-sm font-medium text-slate-900 dark:border-slate-100 dark:text-slate-50'
-                  : '-mb-px flex-1 border-b-2 border-transparent px-2 py-2 text-center text-sm text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-              }
+              aria-current={active === tab.key ? 'page' : undefined}
+              className={`nav-item ${active === tab.key ? 'is-active' : ''}`}
             >
-              {tab.label}
+              <NavIcon name={tab.key} />
+              <span>
+                {tab.label}
+                <small>{tab.detail}</small>
+              </span>
             </a>
           ))}
         </nav>
-      </header>
-
-      <main className="mx-auto max-w-3xl space-y-4 px-4 py-6">{children}</main>
+        <div className="sidebar-note">
+          <span className="little-leaf">✳</span>
+          <p>
+            不必每一天都特别。
+            <br />
+            平常的日子，也值得珍藏。
+          </p>
+          <span>ONE DAY AT A TIME</span>
+        </div>
+        <button type="button" className="sidebar-logout" onClick={onLogout}>
+          退出登录 <span aria-hidden="true">↗</span>
+        </button>
+      </aside>
+      <div className="app-body">
+        <header className="app-header">
+          <a className="mobile-brand" href={hrefToday()}>
+            <BookMark />
+            daybook
+          </a>
+          <span className="header-context">你的私人日记空间</span>
+          <span className="header-tag">慢慢写，慢慢生活</span>
+          <button type="button" className="mobile-logout" onClick={onLogout}>
+            退出
+          </button>
+        </header>
+        <main id="main-content" className="app-main" tabIndex={-1}>
+          <div className="page-heading">
+            <div>
+              <p className="eyebrow">
+                {active === 'today'
+                  ? 'A LITTLE SPACE FOR TODAY'
+                  : active === 'calendar'
+                    ? 'DAYS TO REMEMBER'
+                    : 'MAKE IT YOURS'}
+              </p>
+              <h1>{title}</h1>
+              <p className="page-subtitle">{subtitle}</p>
+            </div>
+            <span className="heading-ornament" aria-hidden="true">
+              ✳
+            </span>
+          </div>
+          <div className="page-content">{children}</div>
+          <footer className="page-footer">
+            daybook <span>·</span> 留住日常的微光
+          </footer>
+        </main>
+      </div>
     </div>
   );
 }

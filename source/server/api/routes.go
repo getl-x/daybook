@@ -592,10 +592,8 @@ func handleSettingsGet(event *core.RequestEvent, vapidPublicKey *string) error {
 	if err != nil {
 		return err
 	}
-	// 自愈排程：老账号可能还没有 reminder_schedule 行（Node 版 rescheduleUser 的
-	// 同一理由——设置页是用户唯一会主动打开的地方）。失败不致命，设置照常能打开，
-	// 脏时区之类的数据问题留给下一轮 tick 去报。
-	if err := scheduler.RescheduleUser(event.App, user.Id, clock()); err != nil {
+	// 只补缺失行；读设置不能覆盖已经到期或正在重试的排程。
+	if err := scheduler.EnsureUserSchedules(event.App, user.Id, clock()); err != nil {
 		applog.Logf(event.App, applog.LevelWarn, "重算提醒排程失败：user=%s err=%v", user.Id, err)
 	}
 	return event.JSON(http.StatusOK, renderSettings(context.Settings, vapidPublicKey, context.Subscriptions))

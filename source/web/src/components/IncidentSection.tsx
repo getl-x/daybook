@@ -22,7 +22,7 @@ export function IncidentSection({
   date,
   incidents,
   onChanged,
-  title = '突发事情',
+  title = '此刻，值得记下',
   emptyHint,
   prominent = false,
 }: Props) {
@@ -63,37 +63,16 @@ export function IncidentSection({
   }
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+    <section className="incident-card">
       <header className="flex items-center justify-between gap-3">
-        <h2
-          className={
-            prominent
-              ? 'text-lg font-semibold text-slate-900 dark:text-slate-50'
-              : 'text-base font-semibold text-slate-900 dark:text-slate-50'
-          }
-        >
-          {title}
-        </h2>
-        {prominent ? null : (
-          <button
-            type="button"
-            onClick={openNew}
-            className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-          >
-            + 记录此刻
-          </button>
-        )}
-      </header>
-
-      {prominent ? (
-        <button
-          type="button"
-          onClick={openNew}
-          className="mt-3 w-full rounded-xl bg-slate-900 px-4 py-3.5 text-base font-semibold text-white transition hover:bg-slate-800 active:scale-[0.99] dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-        >
+        <div>
+          <p className="section-kicker">LITTLE MOMENTS</p>
+          <h2>{title}</h2>
+        </div>
+        <button type="button" onClick={openNew} className="button-primary">
           ＋ 记录此刻
         </button>
-      ) : null}
+      </header>
 
       {notice ? (
         <div className="mt-3">
@@ -104,7 +83,10 @@ export function IncidentSection({
       ) : null}
 
       {incidents.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-400">{emptyHint ?? '还没有记录。想到什么就随手记一条。'}</p>
+        <div className="incident-empty">
+          <span aria-hidden="true">✧</span>
+          <p>{emptyHint ?? '还没有记录。想到什么就随手记一条。'}</p>
+        </div>
       ) : (
         <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
           {incidents.map((incident) => (

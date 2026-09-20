@@ -56,6 +56,8 @@ function messageFor(code: string, status: number): string {
       return '服务未找到该接口（部署是否有误？）';
     case 'no_fields':
       return '没有需要保存的内容';
+    case 'too_long':
+      return '内容超过长度限制，请缩短后再保存';
     default:
       return `请求失败（HTTP ${status}）`;
   }
@@ -137,14 +139,15 @@ async function refreshSession(): Promise<Session | null> {
         body: JSON.stringify({ refreshToken: current.refreshToken }),
       });
       if (!response.ok) {
-        clearSession();
-        return null;
+        if (response.status === 401 || response.status === 403) {
+          clearSession();
+          return null;
+        }
+        throw await toApiError(response);
       }
       const next = sessionFromLoginBody(await response.json());
       saveSession(next);
       return next;
-    } catch {
-      return null; // 网络问题：保留会话，等下一次重试
     } finally {
       refreshing = null;
     }

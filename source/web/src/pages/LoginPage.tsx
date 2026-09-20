@@ -1,7 +1,14 @@
 import { useState, type FormEvent } from 'react';
 
+import { BookMark } from '../components/AppShell.tsx';
 import { ApiError, login, type Session } from '../lib/api.ts';
-import { isNativeShell, isValidServerBase, normalizeServerBase, saveServerBase, serverBase } from '../lib/server.ts';
+import {
+  isNativeShell,
+  isValidServerBase,
+  normalizeServerBase,
+  saveServerBase,
+  serverBase,
+} from '../lib/server.ts';
 
 interface Props {
   onLoggedIn: (session: Session) => void;
@@ -52,14 +59,40 @@ export function LoginPage({ onLoggedIn }: Props) {
   }
 
   return (
-    <main className="flex min-h-full items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-5 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800"
-      >
+    <main className="login-layout">
+      <div className="login-story">
+        <div className="brand">
+          <span className="brand-mark">
+            <BookMark />
+          </span>
+          <span>
+            daybook<small>日子，值得记下来</small>
+          </span>
+        </div>
+        <h1>
+          给平常的日子，
+          <br />
+          留一页位置。
+        </h1>
+        <p>
+          早晨的一点期待，午后的一闪念，
+          <br />
+          还有睡前想对自己说的话。
+        </p>
+        <div className="login-paper">
+          <span>YOUR EVERYDAY, REMEMBERED</span>
+          <p>
+            无需写得漂亮。
+            <br />
+            真实，就很好。
+          </p>
+        </div>
+      </div>
+      <form onSubmit={handleSubmit} className="login-form space-y-5">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">daybook</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">早上想想今天要做什么，白天随手记录，晚上总结。</p>
+          <p className="eyebrow">WELCOME BACK</p>
+          <h2>欢迎回来</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">登录，继续书写你的日常。</p>
         </div>
 
         {native ? (
@@ -113,16 +146,15 @@ export function LoginPage({ onLoggedIn }: Props) {
         </label>
 
         {error ? (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">
+          <p
+            role="alert"
+            className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300"
+          >
             {error}
           </p>
         ) : null}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-        >
+        <button type="submit" disabled={pending} className="button-primary w-full">
           {pending ? '正在登录…' : '登录'}
         </button>
 

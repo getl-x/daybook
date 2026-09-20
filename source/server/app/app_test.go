@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"testing"
 
 	// 触发 migrations 包注册（与 main.go 里同一手法）。
@@ -154,5 +155,23 @@ func TestAppSettingsIsServerOnly(t *testing.T) {
 		if rule != nil {
 			t.Errorf("app_settings 的 %s 规则应为 nil，得到 %q", label, *rule)
 		}
+	}
+}
+
+func TestVAPIDFailureStillRegistersMaintenanceJobs(t *testing.T) {
+	application := New(Config{DataDir: t.TempDir(), AppVersion: "test"})
+	defer application.ResetBootstrapState()
+	application.OnRecordCreate("app_settings").BindFunc(func(event *core.RecordEvent) error {
+		return errors.New("simulated VAPID storage failure")
+	})
+	if err := application.Bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, job := range application.Cron().Jobs() {
+		found[job.Id()] = true
+	}
+	if !found[dailyBackupCronID] || !found[reminderCronID] {
+		t.Fatalf("VAPID failure disabled maintenance jobs: %v", found)
 	}
 }

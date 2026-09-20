@@ -99,6 +99,9 @@ function TodayContent({ session, view, eveningTime, reload }: ContentProps) {
    * 免得自动保存刚把内容写进去就把表单收走）。
    */
   const [planOpen, setPlanOpen] = useState(() => !view.progress.morningDone);
+  useEffect(() => {
+    if (planState?.hasRecovery) setPlanOpen(true);
+  }, [planState?.hasRecovery]);
   /** 还没到点但用户主动要写晚间总结 */
   const [eveningRevealed, setEveningRevealed] = useState(false);
   const [now, setNow] = useState(() => new Date());
@@ -112,13 +115,17 @@ function TodayContent({ session, view, eveningTime, reload }: ContentProps) {
   const forms = [planState, summaryState];
   const states = forms.flatMap((entry) => (entry ? [entry.state] : []));
   const savedAt = forms.reduce<number | null>(
-    (latest, entry) => (entry?.savedAt != null && (latest === null || entry.savedAt > latest) ? entry.savedAt : latest),
+    (latest, entry) =>
+      entry?.savedAt != null && (latest === null || entry.savedAt > latest) ? entry.savedAt : latest,
     null,
   );
   const message = forms.find((entry) => entry?.message != null)?.message ?? null;
 
   /** 摘要行显示本地内容（还没同步上去的草稿也要显示出来） */
   const planText = planState?.values.day_plan ?? view.today.fields.day_plan?.value ?? '';
+  const morningDone = planText.trim() !== '';
+  const eveningDone =
+    (summaryState?.values.evening_summary ?? view.today.fields.evening_summary?.value ?? '').trim() !== '';
   const eveningVisible =
     eveningRevealed || view.progress.eveningDone || isEveningTime(localMinutes(now), eveningTime);
 
@@ -130,14 +137,14 @@ function TodayContent({ session, view, eveningTime, reload }: ContentProps) {
 
   return (
     <>
-      <section className="flex flex-wrap items-center gap-2 text-xs">
-        <Chip done={view.progress.morningDone}>{view.progress.morningDone ? '早间已完成' : '早间待完成'}</Chip>
-        <Chip done={view.progress.eveningDone}>{view.progress.eveningDone ? '晚间已完成' : '晚间待完成'}</Chip>
+      <div className="today-progress">
+        <Chip done={morningDone}>{morningDone ? '早间已记录' : '早间待记录'}</Chip>
+        <Chip done={eveningDone}>{eveningDone ? '晚间已记录' : '晚间待记录'}</Chip>
         <Chip done={view.incidents.length > 0}>{view.incidents.length} 条突发记录</Chip>
-        <span className="ml-auto text-slate-400">
+        <span className="save-indicator" role="status">
           <SaveStatusLine states={states} savedAt={savedAt} message={message} />
         </span>
-      </section>
+      </div>
 
       <IncidentSection
         prominent
@@ -147,14 +154,19 @@ function TodayContent({ session, view, eveningTime, reload }: ContentProps) {
         emptyHint="今天还没有记录。想到什么就随手记一条。"
       />
 
-      <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-        <header className="flex items-baseline justify-between">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">早间记录</h2>
-          <span className="text-xs text-slate-400">{view.meta.diary_date}</span>
+      <section className="journal-card space-y-4">
+        <header className="section-heading">
+          <div>
+            <p className="section-kicker">MORNING NOTES</p>
+            <h2>给今天一点方向</h2>
+          </div>
+          <span className="section-icon" aria-hidden="true">
+            ☼
+          </span>
         </header>
 
         {/* 只隐藏不卸载：useAutosave 的定时器 / 草稿 / 冲突提示照常工作，顶部状态行也不会卡在"正在保存" */}
-        <div className={planOpen ? 'space-y-4 border-t border-dashed border-slate-200 pt-4 dark:border-slate-700' : 'hidden'}>
+        <div className={planOpen ? 'space-y-4' : 'hidden'}>
           <DiaryForm
             ref={planRef}
             userId={session.user.id}
@@ -164,13 +176,12 @@ function TodayContent({ session, view, eveningTime, reload }: ContentProps) {
             onStateChange={setPlanState}
             showStatus={false}
           />
-          <button
-            type="button"
-            onClick={savePlan}
-            className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-          >
-            保存
-          </button>
+          <div className="form-actions">
+            <span>一两件小事，就是很好的开始。</span>
+            <button type="button" onClick={savePlan} className="button-primary">
+              保存并收起 <span aria-hidden="true">↗</span>
+            </button>
+          </div>
         </div>
 
         {planOpen ? null : (
@@ -190,10 +201,15 @@ function TodayContent({ session, view, eveningTime, reload }: ContentProps) {
       </section>
 
       {eveningVisible ? (
-        <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-          <header className="flex items-baseline justify-between">
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">晚间总结</h2>
-            <span className="text-xs text-slate-400">{view.meta.diary_date}</span>
+        <section className="journal-card space-y-4">
+          <header className="section-heading">
+            <div>
+              <p className="section-kicker">EVENING REFLECTION</p>
+              <h2>和今天好好道个别</h2>
+            </div>
+            <span className="section-icon" aria-hidden="true">
+              ☾
+            </span>
           </header>
           <DiaryForm
             userId={session.user.id}
@@ -205,11 +221,15 @@ function TodayContent({ session, view, eveningTime, reload }: ContentProps) {
           />
         </section>
       ) : (
-        <p className="text-center text-xs text-slate-400">
-          <button type="button" onClick={() => setEveningRevealed(true)} className="underline">
-            现在就写晚间总结
+        <div className="evening-invitation">
+          <div>
+            <h2>☾ 留一点时间，回望今天</h2>
+            <p>晚间总结会在傍晚开启，也可以现在开始。</p>
+          </div>
+          <button type="button" onClick={() => setEveningRevealed(true)} className="button-secondary">
+            现在写写
           </button>
-        </p>
+        </div>
       )}
     </>
   );
@@ -223,7 +243,9 @@ function TodayContent({ session, view, eveningTime, reload }: ContentProps) {
 function InstallHint() {
   const [native] = useState(() => isNativeShell());
   const [platform] = useState(() => detectPlatform());
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem('daybook.installHint.dismissed') === '1');
+  const [dismissed, setDismissed] = useState(
+    () => localStorage.getItem('daybook.installHint.dismissed') === '1',
+  );
 
   if (native) return null;
   if (dismissed) return null;
@@ -250,7 +272,7 @@ function InstallHint() {
   }
 
   return (
-    <p className="text-center text-xs text-slate-400">
+    <p className="install-hint">
       <a href={hrefInstall()} className="underline">
         安装到主屏 / 提醒设置
       </a>

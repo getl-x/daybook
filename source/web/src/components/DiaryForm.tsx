@@ -14,6 +14,7 @@ export interface DiaryFormState {
   savedAt: number | null;
   message: string | null;
   conflicts: DiaryFieldName[];
+  hasRecovery: boolean;
   /** 当前输入内容：父组件要把它收成一行摘要时得用本地值，不能只看服务端返回的 */
   values: Record<DiaryFieldName, string>;
 }
@@ -41,8 +42,21 @@ interface Props {
  *
  * 今日页挂两个实例（今日计划 / 晚间总结），单日详情页挂一个（四个字段都能改）。
  */
-export function DiaryForm({ userId, entryDate, initialFields, fields, onStateChange, showStatus = true, ref }: Props) {
-  const autosave = useAutosave({ userId, entryDate, initialFields });
+export function DiaryForm({
+  userId,
+  entryDate,
+  initialFields,
+  fields,
+  onStateChange,
+  showStatus = true,
+  ref,
+}: Props) {
+  const autosave = useAutosave({
+    userId,
+    entryDate,
+    initialFields,
+    fields: fields.map(({ field }) => field),
+  });
 
   // 「保存」按钮直接复用自动保存的 flush：没有改动时它自己就返回了
   useImperativeHandle(ref, () => ({ flush: autosave.flush }), [autosave.flush]);
@@ -57,29 +71,82 @@ export function DiaryForm({ userId, entryDate, initialFields, fields, onStateCha
       savedAt: autosave.savedAt,
       message: autosave.message,
       conflicts: autosave.conflicts,
+      hasRecovery: Object.keys(autosave.recovery).length > 0,
       values: autosave.values,
     });
-  }, [autosave.state, autosave.savedAt, autosave.message, autosave.conflicts, autosave.values]);
+  }, [
+    autosave.state,
+    autosave.savedAt,
+    autosave.message,
+    autosave.conflicts,
+    autosave.values,
+    autosave.recovery,
+  ]);
 
   return (
     <div className="space-y-4">
       {fields.map(({ field, prompt }) => (
-        <label key={field} className="block space-y-1.5">
-          <span className="text-sm text-slate-500 dark:text-slate-400">{prompt}</span>
-          <textarea
-            value={autosave.values[field]}
-            onChange={(event) => autosave.setValue(field, event.target.value)}
-            onBlur={() => void autosave.flush()}
-            rows={3}
-            className="w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900 outline-none transition focus:border-slate-900 focus:bg-white dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
-          />
-        </label>
+        <div key={field} className="space-y-3">
+          {autosave.recovery[field] ? (
+            <Banner tone="warn">
+              <p className="font-medium">本机有一份未同步的草稿</p>
+              <p className="mt-1 text-xs">它与服务器版本不同，选择要保留的内容后继续书写。</p>
+              <p className="draft-preview">{autosave.recovery[field]?.value || '（空白内容）'}</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  className="button-primary"
+                  onClick={() => void autosave.resolveDraft(field, true)}
+                >
+                  恢复本机草稿
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => void autosave.resolveDraft(field, false)}
+                >
+                  保留服务器内容
+                </button>
+              </div>
+            </Banner>
+          ) : null}
+          <label className="diary-field">
+            <span className="field-label">{prompt}</span>
+            <textarea
+              disabled={!autosave.ready || !!autosave.recovery[field]}
+              value={autosave.values[field]}
+              onChange={(event) => autosave.setValue(field, event.target.value)}
+              onBlur={() => void autosave.flush()}
+              rows={4}
+              placeholder={
+                field === 'day_plan'
+                  ? '今天，想把时间留给哪些事？'
+                  : field === 'evening_summary'
+                    ? '那些值得记住的小事，也算数。'
+                    : '慢慢写，不必组织得很完美。'
+              }
+              className="diary-textarea"
+            />
+          </label>
+        </div>
       ))}
 
       {autosave.conflicts.length > 0 ? (
         <Banner tone="warn" onDismiss={autosave.dismissConflicts}>
-          这条内容在另一台设备上更新过，已采用最新版本（本地输入仍在草稿里）。
+          另一台设备也修改过这条内容，本次已保存你刚刚提交的版本。
         </Banner>
+      ) : null}
+
+      {autosave.state === 'error' || autosave.state === 'offline' ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-3 text-sm text-amber-700 dark:text-amber-300"
+        >
+          <span>{autosave.message}</span>
+          <button type="button" onClick={() => void autosave.flush()} className="underline">
+            重试保存
+          </button>
+        </div>
       ) : null}
 
       {showStatus ? (

@@ -60,7 +60,13 @@ export function CalendarPage({ session, month, onLogout }: Props) {
     >
       {error ? <Banner tone="error">{error}</Banner> : null}
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+      <div className="calendar-intro">
+        <span>
+          <strong>{recorded}</strong>天留下了记录
+        </span>
+        <span>每一个圆点，都是生活的回声</span>
+      </div>
+      <section className="calendar-card">
         <header className="mb-3 flex items-center justify-between">
           <a
             href={hrefCalendar(shiftMonth(month, -1))}
@@ -68,7 +74,9 @@ export function CalendarPage({ session, month, onLogout }: Props) {
           >
             ← 上个月
           </a>
-          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{formatMonthTitle(month)}</span>
+          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+            {formatMonthTitle(month)}
+          </span>
           <a
             href={hrefCalendar(shiftMonth(month, 1))}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -97,19 +105,23 @@ export function CalendarPage({ session, month, onLogout }: Props) {
               <a
                 key={date}
                 href={hrefDay(date)}
+                aria-label={`${date}${hasAny ? '，有记录' : '，无记录'}`}
+                aria-current={isToday ? 'date' : undefined}
                 className={[
-                  'flex aspect-square flex-col items-center justify-center gap-1 rounded-lg text-sm transition',
+                  'calendar-day flex aspect-square flex-col items-center justify-center gap-1 rounded-lg text-sm transition',
                   hasAny
-                    ? 'bg-slate-900 text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white'
+                    ? 'has-record'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-                  isToday ? 'ring-2 ring-emerald-500 ring-offset-1 dark:ring-offset-slate-900' : '',
+                  isToday ? 'is-today' : '',
                 ].join(' ')}
               >
                 <span className="tabular-nums">{day}</span>
                 {hasAny ? (
                   <span className="flex items-center gap-1 text-[10px] leading-none opacity-80">
                     {record?.hasContent ? <span title="有文字记录">●</span> : null}
-                    {record !== undefined && record.incidentCount > 0 ? <span title="有突发记录">◆{record.incidentCount}</span> : null}
+                    {record !== undefined && record.incidentCount > 0 ? (
+                      <span title="有突发记录">◆{record.incidentCount}</span>
+                    ) : null}
                   </span>
                 ) : (
                   <span className="text-[10px] leading-none opacity-0">·</span>
@@ -119,7 +131,9 @@ export function CalendarPage({ session, month, onLogout }: Props) {
           })}
         </div>
 
-        <p className="mt-3 text-center text-xs text-slate-400">● 有文字记录 · ◆ 有突发记录 · 点某天可以查看或补写</p>
+        <p className="mt-3 text-center text-xs text-slate-400">
+          ● 有文字记录 · ◆ 有突发记录 · 点某天可以查看或补写
+        </p>
       </section>
     </AppShell>
   );
